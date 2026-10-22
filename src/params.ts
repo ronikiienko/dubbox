@@ -94,14 +94,12 @@ export const TRACKS: TrackDef[] = [
 ];
 export const GLOBAL = TRACKS.length - 1;
 
-export const mixId = (i: number, k: 'dst' | 'phs' | 'lvl' | 'dck' | 'pan' | 'dly' | 'rev') => `mix.${i}.${k}`;
+export const mixId = (i: number, k: 'dst' | 'phs' | 'lvl' | 'pan' | 'dly' | 'rev') => `mix.${i}.${k}`;
 
 /** A track's per-note values, in signal-flow order: voice → Dist → Phs → Lvl → Pan, plus sends. */
 export const lockIds = (i: number) => TRACKS[i].global ? TRACKS[i].voice : [
   ...TRACKS[i].voice,
-  mixId(i, 'dst'), mixId(i, 'phs'), mixId(i, 'lvl'),
-  ...(i === 0 ? [] : [mixId(i, 'dck')]), // KICK drives the ducking, so it has no Duck itself
-  mixId(i, 'pan'), mixId(i, 'dly'), mixId(i, 'rev'),
+  mixId(i, 'dst'), mixId(i, 'phs'), mixId(i, 'lvl'), mixId(i, 'pan'), mixId(i, 'dly'), mixId(i, 'rev'),
 ];
 
 export const SWING = [50, 54, 58, 62, 66, 75];
@@ -173,7 +171,6 @@ const DESCRIPTIONS: Record<string, string> = {
   decay: 'How long the note rings. Middle = default.',
   dst: 'Saturation. More grit, same loudness.',
   phs: 'Phaser: slow swirling sweep. 0 = off.',
-  dck: 'Pumps under the kick: dips on every kick and swells back.',
   lvl: 'Volume in dB. Middle = 0 dB, down to off, up to +12.',
   pan: 'Left ↔ right. Middle = centre.',
   dly: 'Send to the tape delay (shared echo).',
@@ -245,7 +242,6 @@ export const PARAMS: ParamDef[] = [
       id: mixId(i, 'pan'), label: 'Pan', min: -1, max: 1, def: 0, curve: 'lin', bipolar: true,
       fmt: (v) => (Math.abs(v) < 0.01 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100)),
     }),
-    p({ id: mixId(i, 'dck'), label: 'Duck', min: 0, max: 1, def: 0, curve: 'lin' }),
     p({ id: mixId(i, 'dly'), label: 'Delay', min: 0, max: 1, def: 0, curve: 'lin' }),
     p({ id: mixId(i, 'rev'), label: 'Reverb', min: 0, max: 1, def: 0, curve: 'lin' }),
     p({ id: mixId(i, 'phs'), label: 'Phaser', min: 0, max: 1, def: 0, curve: 'lin' }),
