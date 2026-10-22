@@ -45,31 +45,25 @@ const THROW_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY'];
 
 // timeline geometry (px)
 const CELL = 22;
-const ROW_MIN = 28; // track lanes stretch between these to fill the screen
-const ROW_MAX = 60;
+const ROW_MIN = 34; // track lanes stretch between these to fill the screen
+const ROW_MAX = 84;
 const RULER_H = 20;
-const SUB_MIN = 6; // value rows are compact (a heat strip) and stretch between these to fill the screen
-const SUB_MAX = 14;
-const HEAT_BELOW = 24; // rows shorter than this (closed, or mid-animation) draw nothing
-const LABEL_COLS = 3;
-const GROUP_GAP = 8; // breathing room under each track's last row (its name hangs below the row) // rows shorter than this draw as heat, taller as bars
+const PAD = 9;
+const SUB_H = 22; // per-note bar rows of an expanded track
 const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
+const HOT_DWELL = 150; // ms the mouse must rest on a row before it grows/hands over
 const HOT_PAD_TOP = 13; // room for the value numbers
 const HOT_PAD_BOTTOM = 2;
-const PANEL_BG = '#191816';
 const COLORS = {
-  bg: '#0b0a09',
-  cell: '#141311', // recessed step
-  beat: '#2a2722', // every 4th step, clearly lighter than the rest
-  line: '#2c2a25',
-  dim: '#6d675b',
-  text: '#e6dfcc',
-  accent: '#f0a032', // amber LED
-  accentDim: '#6e4a1d',
-  hit: '#ffd88a', // a step lighting up as the playhead passes
-  playhead: '#ff6a2b',
+  bg: '#0d0d0c',
+  cell: '#1f1e1b',
+  beat: '#292824',
+  line: '#3a3833',
+  dim: '#5d5a53',
+  text: '#d9d4c7',
+  accent: '#e8a33d',
+  accentDim: '#6b4d22',
 };
-const DISPLAY_FONT = "'DIN Condensed', 'Avenir Next Condensed', 'Arial Narrow', sans-serif";
 
 // ---- UI -----------------------------------------------------------------
 
@@ -87,16 +81,18 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let scroller: HTMLElement, canvas: HTMLCanvasElement;
   let startStep = 0; // where Play starts (set by clicking the ruler)
   let follow = true; // keep the playhead in view while playing
+  let expanded = -1; // track showing its per-note bar rows
   let resizeObs: ResizeObserver | undefined;
   let help: HTMLElement, helpBtn: HTMLButtonElement;
   let helpOpen = false;
   let tracksEl: HTMLElement;
   let mainH = 52; // height of a track's main lane, fitted to the window
-  let subH = 8; // height of a compact value row, fitted to the window
   let spacerEl: HTMLElement;
   type RowRef = { ti: number; sub: number } | null;
-  let hot: RowRef = null; // the open value row, drawn tall for editing (opened by a click)
-  let openedAt = 0; // when it opened: the double-click that may follow isn't an edit
+  let hot: RowRef = null; // bar row drawn tall (the one the mouse rested on)
+  let cand: RowRef = null; // row under the mouse right now; becomes hot after HOT_DWELL ms
+  let candSince = 0;
+  let gesture = false; // a drag is running: hot row is locked
   const rowAnim = new Map<string, number>(); // animated row heights
   let subLabels: HTMLElement[][] = [];
 
@@ -242,16 +238,16 @@ export function mountUI(root: HTMLElement, initial: Project) {
   }
 
   // ---- lane geometry ----------------------------------------------------
-  // Each track has a main lane plus one compact row per per-note value, always visible.
+  // Each track has a main lane; the expanded track adds one bar row per lockable knob.
 
-  const subRows = (ti: number) => lockIds(ti);
+  const subRows = (ti: number) => (ti === expanded ? lockIds(ti) : []);
   const isHot = (ti: number, j: number) => !!hot && hot.ti === ti && hot.sub === j;
-  const rowH = (ti: number, j: number) => rowAnim.get(`${ti}:${j}`) ?? subH;
+  const rowH = (ti: number, j: number) => rowAnim.get(`${ti}:${j}`) ?? SUB_H;
   const padTop = (ti: number, j: number) => (isHot(ti, j) ? HOT_PAD_TOP : 2);
   const padBottom = (ti: number, j: number) => (isHot(ti, j) ? HOT_PAD_BOTTOM : 2);
   /** Bar area of a row: [top y, height] in which 0..1 is drawn. */
   const barSpan = (ti: number, j: number) => rowH(ti, j) - padTop(ti, j) - padBottom(ti, j);
-  const laneH = (ti: number) => subRows(ti).reduce((y, _, j) => y + rowH(ti, j), mainH + GROUP_GAP);
+  const laneH = (ti: number) => subRows(ti).reduce((y, _, j) => y + rowH(ti, j), mainH);
   const laneTop = (ti: number) => {
     let y = RULER_H;
     for (let i = 0; i < ti; i++) y += laneH(i);
@@ -284,44 +280,34 @@ export function mountUI(root: HTMLElement, initial: Project) {
   }
 
   /**
-   * Lanes and value rows share the panel's height, so the whole song fits without scrolling. Room for
-   * the one hot row comes off the top; value rows get what's left after minimum lanes, then lanes
-   * take the rest. Below the minimums the panel scrolls.
+   * Lanes share the panel's height, so the whole song fits without scrolling. An expanded track's
+   * rows (and the room a hot row grows into) come off the top first; below ROW_MIN the panel scrolls.
    */
   function fitRows() {
     if (!tracksEl) return;
     const cs = getComputedStyle(tracksEl);
     const avail = tracksEl.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - RULER_H - 14; // 14: scrollbar
-    const rows = TRACKS.reduce((n, _, ti) => n + lockIds(ti).length, 0);
-    const lanes = TRACKS.length;
-    const nextSub = clamp(Math.floor((avail - HOT_H - lanes * (ROW_MIN + GROUP_GAP)) / rows), SUB_MIN, SUB_MAX);
-    const next = clamp(Math.floor((avail - HOT_H - rows * nextSub) / lanes) - GROUP_GAP, ROW_MIN, ROW_MAX);
-    if (next === mainH && nextSub === subH) return;
+    const extra = expanded >= 0 ? lockIds(expanded).length * SUB_H + HOT_H - SUB_H : 0;
+    const next = clamp(Math.floor((avail - extra) / TRACKS.length), ROW_MIN, ROW_MAX);
+    if (next === mainH) return;
     mainH = next;
-    subH = nextSub;
     heads.forEach((el) => (el.style.height = `${mainH}px`));
-    subLabels.forEach((labels, ti) => labels.forEach((el, j) => (el.style.height = `${rowH(ti, j)}px`)));
   }
-
-  /** The ruler sticks to the top of the visible panel. */
-  const rulerY = () => Math.max(0, Math.min(tracksEl?.scrollTop ?? 0, totalH() - RULER_H));
 
   const sameRow = (a: RowRef, b: RowRef) => a?.ti === b?.ti && a?.sub === b?.sub;
 
-  /** Click a compact row = open it for editing (one at a time); click it again or Esc = close. */
-  function openRow(r: RowRef) {
-    hot = sameRow(r, hot) ? null : r;
-    openedAt = performance.now();
-  }
-
-  /** Per frame: ease every row's height toward its target. */
-  function animateRows(_now: number, dt: number) {
+  /**
+   * Per frame: promote the row the mouse has rested on to hot (after a short dwell, so passing
+   * over rows doesn't make them flap), then ease every row's height toward its target.
+   */
+  function animateRows(now: number, dt: number) {
+    if (!gesture && !sameRow(cand, hot) && now - candSince > HOT_DWELL) hot = cand;
     const k = 1 - Math.exp(-dt / 0.04); // ~120 ms to settle
     let changed = false;
     subLabels.forEach((labels, ti) => labels.forEach((el, j) => {
       const key = `${ti}:${j}`;
-      const cur = rowAnim.get(key) ?? subH;
-      const target = isHot(ti, j) ? HOT_H : subH;
+      const cur = rowAnim.get(key) ?? SUB_H;
+      const target = isHot(ti, j) ? HOT_H : SUB_H;
       const next = Math.abs(target - cur) < 0.5 ? target : cur + (target - cur) * k;
       el.classList.toggle('hot', isHot(ti, j));
       if (next === cur) return;
@@ -384,7 +370,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const x = e.offsetX + scroller.scrollLeft;
       const si = clamp(Math.floor(x / CELL), 0, SONG_STEPS - 1);
       const y = e.offsetY;
-      if (y < rulerY() + RULER_H) return { si, ti: -1, sub: -1, rowTop: 0, ruler: true };
+      if (y < RULER_H) return { si, ti: -1, sub: -1, rowTop: 0, ruler: true };
       for (let ti = 0; ti < TRACKS.length; ti++) {
         const top = laneTop(ti);
         if (y < top + mainH) return { si, ti, sub: -1, rowTop: top, ruler: false };
@@ -393,7 +379,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
           if (y < rt + rowH(ti, j)) return { si, ti, sub: j, rowTop: rt, ruler: false };
           rt += rowH(ti, j);
         }
-        if (y < top + laneH(ti)) break; // the gap under a track: nothing there
       }
       return { si, ti: -1, sub: -1, rowTop: 0, ruler: false };
     };
@@ -430,6 +415,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const { si, ti, sub, rowTop, ruler } = hit(e);
       if (ruler || (e.shiftKey && ti >= 0)) {
         canvas.setPointerCapture(e.pointerId);
+        gesture = true;
         selDrag = { ruler, t0: ti, s0: si, ti, moved: false };
         if (!ruler) updateSel(si, ti);
         return;
@@ -438,15 +424,10 @@ export function mountUI(root: HTMLElement, initial: Project) {
       sel = null;
       pending = snapshot(p);
       const tr = p.tracks[ti];
-      if (sub >= 0 && !isHot(ti, sub)) {
-        // a compact row: this click only opens it
-        pending = null;
-        openRow({ ti, sub });
-        return;
-      }
       if (sub >= 0) {
         const id = subRows(ti)[sub];
         canvas.setPointerCapture(e.pointerId);
+        gesture = true;
         bars = { ti, sub, id, si0: si, last: si, y: e.clientY, idx0: toIndex(PARAM_BY_ID[id], noteValue(ti, id, si)), rowTop, mode: 'pending' };
         return;
       }
@@ -461,11 +442,18 @@ export function mountUI(root: HTMLElement, initial: Project) {
         return;
       }
       canvas.setPointerCapture(e.pointerId);
+      gesture = true;
       drag = { ti, si0: si, last: si, y: e.clientY, note: tr.note[si], mode: 'pending', paint: (tr.s[si] ? 0 : 1) as StepState };
     });
     canvas.addEventListener('pointermove', (e) => {
       const h0 = hit(e);
       hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
+      // the hot row stays locked while a gesture is running, so a stroke never jumps rows
+      const c: RowRef = h0.sub >= 0 ? { ti: h0.ti, sub: h0.sub } : null;
+      if (!sameRow(c, cand)) {
+        cand = c;
+        candSince = performance.now();
+      }
       if (selDrag) {
         if (h0.si !== selDrag.s0 || h0.ti !== selDrag.t0) selDrag.moved = true;
         if (selDrag.moved || !selDrag.ruler) updateSel(h0.si, h0.ti);
@@ -526,23 +514,28 @@ export function mountUI(root: HTMLElement, initial: Project) {
       drag = null;
       bars = null;
       pending = null;
+      gesture = false;
     };
-    canvas.addEventListener('pointerleave', () => (hover = null));
+    canvas.addEventListener('pointerleave', () => {
+      hover = null;
+      if (!cand) return;
+      cand = null;
+      candSince = performance.now();
+    });
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
 
     // double-click a bar = remove that note's lock (back to the knob)
     canvas.addEventListener('dblclick', (e) => {
       const { si, ti, sub } = hit(e);
-      if (performance.now() - openedAt < 500) return; // that was the click that opened the row
-      if (ti >= 0 && sub >= 0 && isHot(ti, sub)) {
+      if (ti >= 0 && sub >= 0) {
         pending = snapshot(p);
         setLock(ti, subRows(ti)[sub], si, NO_LOCK);
         pending = null;
       }
     });
 
-    // Vertical wheel over an active step = note. Otherwise wheel scrolls the timeline (or the panel, see below).
+    // Vertical wheel over an active step = note. Otherwise wheel scrolls the timeline.
     scroller.addEventListener('wheel', (e) => {
       const vertical = Math.abs(e.deltaY) > Math.abs(e.deltaX) && !e.shiftKey;
       if (vertical && e.target === canvas) {
@@ -554,8 +547,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
           return;
         }
       }
-      // when the lanes don't fit, the vertical wheel scrolls the panel (natively); otherwise the song
-      if (vertical && tracksEl.scrollHeight > tracksEl.clientHeight) return;
       setFollow(false);
       if (vertical) {
         e.preventDefault();
@@ -575,26 +566,32 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const H = totalH();
     ctx.clearRect(0, 0, w, H);
 
-    // bar lines
+    // ruler: bar numbers + start marker
+    ctx.font = '10px ui-monospace, Menlo, monospace';
+    ctx.textBaseline = 'middle';
     for (let b = Math.floor(first / STEPS_PER_BAR); b * STEPS_PER_BAR <= last; b++) {
+      const x = b * STEPS_PER_BAR * CELL - x0;
       ctx.fillStyle = COLORS.line;
-      ctx.fillRect(b * STEPS_PER_BAR * CELL - x0, 0, 1, H);
+      ctx.fillRect(x, 0, 1, H);
+      ctx.fillStyle = COLORS.dim;
+      ctx.fillText(String(b + 1), x + 4, RULER_H / 2);
     }
+    const sx = startStep * CELL - x0;
+    ctx.fillStyle = COLORS.accent;
+    ctx.beginPath();
+    ctx.moveTo(sx, RULER_H - 7);
+    ctx.lineTo(sx + 7, RULER_H - 7);
+    ctx.lineTo(sx, RULER_H);
+    ctx.fill();
 
     // lanes
     ctx.textAlign = 'center';
-    ctx.font = `bold 12px ${DISPLAY_FONT}`;
+    ctx.font = '9px ui-monospace, Menlo, monospace';
     for (let ti = 0; ti < TRACKS.length; ti++) {
       const tr = p.tracks[ti];
       const top = laneTop(ti);
-      // a dark seam between tracks, so each track's rows read as one group
-      if (ti > 0) {
-        ctx.fillStyle = '#0c0b0a';
-        ctx.fillRect(0, top, w, 1);
-      }
-      const pad = Math.round(mainH * 0.17);
-      const y = top + pad;
-      const hh = mainH - pad * 2;
+      const y = top + PAD;
+      const hh = mainH - PAD * 2;
       const ids = lockIds(ti);
       ctx.globalAlpha = audible(p.tracks, ti) ? 1 : 0.3;
       const g = TRACKS[ti].global;
@@ -606,11 +603,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
         ctx.fillStyle = st ? COLORS.accentDim : si % 4 === 0 ? COLORS.beat : COLORS.cell;
         ctx.fillRect(x, y, CELL - 2, hh);
         if (!st) continue;
-        // an LED strip along the top of every note; the note under the playhead lights up whole
-        const now = t.playing && Math.floor(t.phase) === si && !g;
-        ctx.fillStyle = now ? COLORS.hit : COLORS.accent;
-        if (now) ctx.fillRect(x, y, CELL - 2, hh);
-        else ctx.fillRect(x, y, CELL - 2, 2);
         if (g) {
           ctx.fillStyle = COLORS.text;
           const sc = tr.locks.scale[si];
@@ -634,13 +626,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
         }
       }
 
-      // value rows: compact = heat strip of how far each note is from the default, hot = bars
+      // bar rows of the expanded track: one bar per note, height = value
       subRows(ti).forEach((id, j) => {
         const d = PARAM_BY_ID[id];
         const rowTop = subTop(ti, j);
         const height = rowH(ti, j);
-        // compact rows show nothing: they're only there to be clicked open
-        if (height < HEAT_BELOW) return;
         const pad = padTop(ti, j);
         const span = barSpan(ti, j);
         const bottom = rowTop + height - padBottom(ti, j);
@@ -683,27 +673,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
     }
     ctx.textAlign = 'left';
 
-    // ruler (stays on top while the panel scrolls vertically): bar numbers + start marker
-    const ry = rulerY();
-    ctx.fillStyle = PANEL_BG;
-    ctx.fillRect(0, ry, w, RULER_H);
-    ctx.font = `bold 13px ${DISPLAY_FONT}`;
-    ctx.textBaseline = 'middle';
-    for (let b = Math.floor(first / STEPS_PER_BAR); b * STEPS_PER_BAR <= last; b++) {
-      const x = b * STEPS_PER_BAR * CELL - x0;
-      ctx.fillStyle = COLORS.line;
-      ctx.fillRect(x, ry, 1, RULER_H);
-      ctx.fillStyle = COLORS.dim;
-      ctx.fillText(String(b + 1), x + 4, ry + RULER_H / 2);
-    }
-    const sx = startStep * CELL - x0;
-    ctx.fillStyle = COLORS.accent;
-    ctx.beginPath();
-    ctx.moveTo(sx, ry + RULER_H - 7);
-    ctx.lineTo(sx + 7, ry + RULER_H - 7);
-    ctx.lineTo(sx, ry + RULER_H);
-    ctx.fill();
-
     // selection + where a paste would land (while ⌘/Ctrl is held)
     const box = (r: Region) => {
       const y0 = laneTop(r.t0), y1 = laneTop(r.t1) + laneH(r.t1);
@@ -728,11 +697,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
     // playhead
     if (t.playing || t.phase !== startStep) {
-      ctx.fillStyle = COLORS.playhead;
-      ctx.shadowColor = COLORS.playhead;
-      ctx.shadowBlur = 8;
+      ctx.fillStyle = COLORS.text;
       ctx.fillRect(t.phase * CELL - x0, 0, 2, H);
-      ctx.shadowBlur = 0;
     }
   }
 
@@ -749,8 +715,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       send({ t: 'play', on, from: startStep });
     }
     playBtn.classList.toggle('lit', on);
-    playBtn.textContent = on ? 'STOP' : 'PLAY';
-    document.body.classList.toggle('playing', on); // spins the record
+    playBtn.textContent = on ? '■ STOP' : '▶ PLAY';
   }
 
   function setRec(on: boolean) {
@@ -759,7 +724,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     if (on) startEngine(() => p).then(() => send({ t: 'rec', on: t.rec }));
     else send({ t: 'rec', on });
     recBtn.classList.toggle('lit', on);
-    if (!on) recBtn.textContent = 'REC';
+    if (!on) recBtn.textContent = '● REC';
   }
 
   function setThrow(i: number, on: boolean) {
@@ -783,28 +748,19 @@ export function mountUI(root: HTMLElement, initial: Project) {
     helpBtn.classList.toggle('lit', on);
   }
 
-  function logo() {
-    const el = h('div', 'logo');
-    const word = h('div', 'wordmark');
-    word.append(h('b', '', 'DUBBOX'), h('small', '', '33⅓ RPM · STEREO · DUB TECHNIQUE'));
-    el.append(h('div', 'vinyl'), word);
-    return el;
-  }
-
   function build() {
     const scrollLeft = scroller?.scrollLeft ?? 0;
     heads = [];
     subLabels = [];
     rowAnim.clear();
-    hot = null;
+    hot = cand = null;
     names = [];
     root.innerHTML = '';
 
     // header
     const header = h('header');
-    playBtn = button(t.playing ? 'STOP' : 'PLAY', 'btn led', () => setPlaying(!t.playing));
-    playBtn.classList.toggle('lit', t.playing);
-    recBtn = button('REC', 'btn rec led', () => setRec(!t.rec));
+    playBtn = button('▶ PLAY', 'btn', () => setPlaying(!t.playing));
+    recBtn = button('● REC', 'btn rec', () => setRec(!t.rec));
     followBtn = button('FOLLOW', 'btn small lit', () => setFollow(!follow));
     followBtn.title = 'keep the playhead in view (F)';
     const file = h('input');
@@ -820,7 +776,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       build();
     });
     header.append(
-      logo(),
+      h('div', 'logo', 'DUBBOX'),
       playBtn, recBtn, followBtn,
       h('div', 'spacer'),
       helpBtn = button('?', 'btn small help-btn', () => setHelp(!helpOpen)),
@@ -839,16 +795,19 @@ export function mountUI(root: HTMLElement, initial: Project) {
     // tracks: heads | scrolling timeline
     const tracks = h('main', 'tracks');
     tracksEl = tracks;
-    tracks.addEventListener('scroll', () => drawTimeline());
     const headCol = h('div', 'col');
     headCol.append(h('div', 'ruler-gap'));
     TRACKS.forEach((td, ti) => {
       const head = h('div', 'head');
       head.style.height = `${mainH}px`;
-      const name = h('div', 'name', td.name);
+      const name = h('div', 'name', (ti === expanded ? '▾ ' : '▸ ') + td.name);
       name.title = td.global
-        ? 'song-wide values: scale, key, tempo, FX'
-        : `hold ${THROW_KEYS[ti].slice(3)} = dub throw · ${ti + 1} = mute · shift+${ti + 1} = solo`;
+        ? 'click = show the song-wide values (scale, key, tempo, FX)'
+        : `click = show sound per note · hold ${THROW_KEYS[ti].slice(3)} = dub throw · ${ti + 1} = mute · shift+${ti + 1} = solo`;
+      name.addEventListener('click', () => {
+        expanded = expanded === ti ? -1 : ti;
+        build();
+      });
       const toggles = h('div', 'toggles');
       if (!td.global) toggles.append(
         button('M', 'tog mute', () => { p.tracks[ti].mute = !p.tracks[ti].mute; flagsChanged(ti); }),
@@ -862,10 +821,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const el = h('div', 'sublabel');
         el.append(h('div', 'subname', PARAM_BY_ID[id].label), h('div', 'subdesc', describe(id)));
         el.style.height = `${rowH(ti, j)}px`;
-        // names stagger across 3 columns, so each can be taller than its row without touching a neighbour
-        el.style.setProperty('--col', String(j % LABEL_COLS));
-        el.addEventListener('click', () => openRow({ ti, sub: j }));
-        if (j === lockIds(ti).length - 1) el.style.marginBottom = `${GROUP_GAP}px`;
         headCol.append(el);
         return el;
       });
@@ -904,7 +859,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
     if (t.rec) {
       const s = Math.floor((now - t.recStart) / 1000);
-      recBtn.textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+      recBtn.textContent = `● ${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
     }
     requestAnimationFrame(frame);
   }
@@ -925,7 +880,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
     }
     if (e.code === 'Escape') {
       sel = null;
-      hot = null;
       if (helpOpen) setHelp(false);
     }
     if (e.key === '?') setHelp(!helpOpen);
