@@ -114,7 +114,7 @@ There are **no knobs**. Everything is per note, and the song-wide values are row
 - **⌘Z / ⇧⌘Z** undo / redo (100 steps) for all note edits: clicks, paints, drags, bar edits, region edits. GLOBAL values are in it too. Mutes/solo are not.
 
 ### 3.3 Defaults in the middle
-Values with a neutral "normal" default sit at the **middle position** (4 of 0–8), so every note can go either way: **Decay** (range centred on the default), **Lvl** (0 … 2× default, top = +6 dB), **Pan** (centre), **LP on BASS/CHORD** (±3 octaves). Values whose natural default is "off" or "open" stay at the edge: HP, Dist, Phs, Dly, Rev, Res, drum LP (fully open).
+Values with a neutral "normal" default sit at the **middle position** (4 of 0–8), so every note can go either way: **Decay** (range centred on the default), **Lvl** (in dB: off, −18, −12, −6, **0**, +3, +6, +9, +12), **Pan** (centre), **LP on BASS/CHORD** (±3 octaves). Values whose natural default is "off" or "open" stay at the edge: HP, Dist, Phs, Dly, Rev, Res, drum LP (fully open).
 
 ### 3.5 GLOBAL lane
 The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swing, Vol, Delay Time / Fbk / Tone, Reverb Size, Tape Age**.

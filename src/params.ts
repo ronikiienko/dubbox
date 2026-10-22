@@ -103,6 +103,11 @@ export const lockIds = (i: number) => TRACKS[i].global ? TRACKS[i].voice : [
 
 export const SWING = [50, 54, 58, 62, 66, 75];
 
+/** Lvl positions in dB (middle = 0 dB = the default level): big audible steps down, 3 dB steps up. */
+export const LVL_DB = [-Infinity, -18, -12, -6, 0, 3, 6, 9, 12];
+const LVL_UNITY = 0.7; // fader gain at 0 dB
+export const lvlGain = (i: number) => LVL_UNITY * Math.pow(10, LVL_DB[i] / 20);
+
 /** Modes on Root, dark → bright: each step changes one note. Index 2 (minor) is the default. */
 export const SCALES: [string, number[]][] = [
   ['Loc', [0, 1, 3, 5, 6, 8, 10]],
@@ -161,7 +166,7 @@ const DESCRIPTIONS: Record<string, string> = {
   decay: 'How long the note rings. Middle = default.',
   dst: 'Saturation. More grit, same loudness.',
   phs: 'Phaser: slow swirling sweep. 0 = off.',
-  lvl: 'Volume. Middle = default, top = +6 dB.',
+  lvl: 'Volume in dB. Middle = 0 dB, down to off, up to +12.',
   pan: 'Left ↔ right. Middle = centre.',
   dly: 'Send to the tape delay (shared echo).',
   rev: 'Send to the reverb (shared room).',
@@ -221,7 +226,7 @@ export const PARAMS: ParamDef[] = [
   // mixer
   ...TRACKS.flatMap((_, i) => [
     p({ id: mixId(i, 'dst'), label: 'Dist', min: 0, max: 1, def: 0, curve: 'lin' }),
-    p({ id: mixId(i, 'lvl'), label: 'Lvl', min: 0, max: 1.4, def: 0.7, curve: 'lin' }), // middle = default, top = +6 dB
+    p({ id: mixId(i, 'lvl'), label: 'Lvl', min: 0, max: 8, def: 4, curve: 'step', steps: LVL_DB.map((db) => (db === -Infinity ? 'off' : db > 0 ? '+' + db : String(db))) }),
     p({
       id: mixId(i, 'pan'), label: 'Pan', min: -1, max: 1, def: 0, curve: 'lin', bipolar: true,
       fmt: (v) => (Math.abs(v) < 0.01 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100)),

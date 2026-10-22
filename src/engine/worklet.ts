@@ -1,7 +1,7 @@
 // The whole engine: clock, sequencer, voices, mixer, FX, master.
 // Runs on the audio thread. Talks to the UI only through `port` (see bridge.ts).
 
-import { GLOBAL, PARAMS, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
+import { GLOBAL, PARAMS, lvlGain, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
 import { NO_LOCK, audible, type TrackState } from '../state';
 import type { FromEngine, ToEngine } from './bridge';
 import { SVF, Smooth, timeCoef } from './dsp';
@@ -185,7 +185,7 @@ class Engine extends AudioWorkletProcessor {
       R[d.id] = toReal(d, n);
     }
 
-    this.lvlT[t] = audible(this.tracks, t) ? R[mixId(t, 'lvl')] : 0;
+    this.lvlT[t] = audible(this.tracks, t) ? lvlGain(R[mixId(t, 'lvl')]) : 0;
     this.dlyT[t] = this.throws[t] ? 1 : R[mixId(t, 'dly')];
     this.revT[t] = R[mixId(t, 'rev')];
     this.panT[t] = R[mixId(t, 'pan')];
