@@ -37,12 +37,10 @@ const ROW_H = 52;
 const RULER_H = 20;
 const PAD = 9;
 const SUB_H = 22; // per-note bar rows of an expanded track
-const HOT_H = 108; // the bar row under the mouse grows to this, for precise drawing
+const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
 const HOT_DWELL = 150; // ms the mouse must rest on a row before it grows/hands over
-// Grown rows keep empty space above the max and below the min, so reaching for an extreme
-// stays inside the row (that space reads as max / min). Top space also holds the value numbers.
-const HOT_PAD_TOP = 28;
-const HOT_PAD_BOTTOM = 14;
+const HOT_PAD_TOP = 13; // room for the value numbers
+const HOT_PAD_BOTTOM = 2;
 const COLORS = {
   bg: '#0d0d0c',
   cell: '#1f1e1b',
@@ -684,7 +682,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
             const half = (d.positions - 1) / 2;
             const label = d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
             ctx.fillStyle = locked ? COLORS.text : COLORS.dim;
-            ctx.fillText(label, x + CELL / 2, rowTop + 9);
+            ctx.fillText(label, x + CELL / 2, rowTop + 7);
           }
         }
       });
