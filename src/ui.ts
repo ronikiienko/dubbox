@@ -33,6 +33,7 @@ const HELP: [string, string][] = [
   ['dbl-click value', 'unset'],
   ['click ruler', 'play from bar'],
   ['drag ruler / ⇧-drag', 'select bars / area'],
+  ['L', 'loop selection / bar · again = off'],
   ['⌘C ⌘X ⌘V', 'copy / cut / paste at mouse'],
   ['⌘D', 'duplicate'],
   ['delete', 'clear selection'],
@@ -76,10 +77,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   let heads: HTMLElement[] = [];
   let names: HTMLElement[] = [];
-  let playBtn: HTMLButtonElement, recBtn: HTMLButtonElement, followBtn: HTMLButtonElement;
+  let playBtn: HTMLButtonElement, recBtn: HTMLButtonElement, followBtn: HTMLButtonElement, loopBtn: HTMLButtonElement;
   let scroller: HTMLElement, canvas: HTMLCanvasElement;
   let startStep = 0; // where Play starts (set by clicking the ruler)
   let follow = true; // keep the playhead in view while playing
+  let loop: { s0: number; s1: number } | null = null; // playback repeats steps s0..s1 (exclusive)
   let expanded = -1; // track showing its per-note bar rows
   let closing = -1; // track whose rows are folding away (still drawn until they reach 0)
   let resizeObs: ResizeObserver | undefined;
@@ -583,6 +585,16 @@ export function mountUI(root: HTMLElement, initial: Project) {
       ctx.fillStyle = COLORS.dim;
       ctx.fillText(String(b + 1), x + 4, RULER_H / 2);
     }
+    if (loop) {
+      // loop bracket on the ruler + a faint wash over the lanes
+      const lx = loop.s0 * CELL - x0, lw = (loop.s1 - loop.s0) * CELL;
+      ctx.fillStyle = 'rgba(232, 163, 61, 0.05)';
+      ctx.fillRect(lx, RULER_H, lw, H - RULER_H);
+      ctx.fillStyle = COLORS.accent;
+      ctx.fillRect(lx, 0, lw, 3);
+      ctx.fillRect(lx, 0, 2, RULER_H);
+      ctx.fillRect(lx + lw - 2, 0, 2, RULER_H);
+    }
     const sx = startStep * CELL - x0;
     ctx.fillStyle = COLORS.accent;
     ctx.beginPath();
@@ -752,6 +764,21 @@ export function mountUI(root: HTMLElement, initial: Project) {
     playBtn.textContent = on ? '■ STOP' : '▶ PLAY';
   }
 
+  /** Loop the selection, else the bar under the playhead; the same region again (or no selection) = off. */
+  function toggleLoop() {
+    const bar = Math.floor((t.playing ? t.phase : startStep) / STEPS_PER_BAR) * STEPS_PER_BAR;
+    const want = sel ? { s0: sel.s0, s1: sel.s1 } : loop ? null : { s0: bar, s1: bar + STEPS_PER_BAR };
+    loop = want && !(loop && sel && loop.s0 === want.s0 && loop.s1 === want.s1) ? want : null;
+    sel = null;
+    send({ t: 'loop', s0: loop?.s0 ?? 0, s1: loop?.s1 ?? 0 });
+    loopBtn.classList.toggle('lit', !!loop);
+    if (!loop) return;
+    startStep = loop.s0;
+    if (!t.playing) t.phase = startStep;
+    // a loop behind the playhead would only come round after the song wraps: go there now
+    else if (t.phase >= loop.s1) setPlaying(true);
+  }
+
   function setRec(on: boolean) {
     t.rec = on;
     t.recStart = performance.now();
@@ -796,6 +823,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
     recBtn = button('● REC', 'btn rec', () => setRec(!t.rec));
     followBtn = button('FOLLOW', 'btn small lit', () => setFollow(!follow));
     followBtn.title = 'keep the playhead in view (F)';
+    loopBtn = button('LOOP', 'btn small' + (loop ? ' lit' : ''), toggleLoop);
+    loopBtn.title = 'loop the selection, or the current bar (L)';
     const file = h('input');
     file.type = 'file';
     file.accept = 'application/json';
@@ -810,7 +839,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     });
     header.append(
       h('div', 'logo', 'DUBBOX'),
-      playBtn, recBtn, followBtn,
+      playBtn, recBtn, followBtn, loopBtn,
       h('div', 'spacer'),
       helpBtn = button('?', 'btn small help-btn', () => setHelp(!helpOpen)),
       button('SAVE', 'btn small', () => exportProject(p)),
@@ -886,6 +915,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     if (t.playing) {
       const bpm = toReal(PARAM_BY_ID.tempo, noteValue(GLOBAL, 'tempo', Math.floor(t.phase)));
       t.phase = (t.enginePhase + (now - t.posAt) / 1000 / (60 / bpm / 4)) % SONG_STEPS;
+      if (loop && t.enginePhase < loop.s1 && t.phase >= loop.s1) t.phase = loop.s0 + ((t.phase - loop.s1) % (loop.s1 - loop.s0));
       if (follow) scroller.scrollLeft = t.phase * CELL - scroller.clientWidth * 0.25;
     }
     drawTimeline();
@@ -936,6 +966,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       flagsChanged(i);
     }
     if (e.code === 'KeyF') setFollow(!follow);
+    if (e.code === 'KeyL') toggleLoop();
     const ti = THROW_KEYS.indexOf(e.code);
     if (ti >= 0) setThrow(ti, true);
   });

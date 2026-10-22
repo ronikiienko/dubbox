@@ -40,6 +40,8 @@ class Engine extends AudioWorkletProcessor {
   private phase = 0; // song position in 16th steps
   private nextK = 0; // next step to trigger
   private total = 0; // song length in steps
+  private loop0 = 0; // loop region: steps loop0..loop1, loop1 = 0 = play the whole song
+  private loop1 = 0;
   private posCounter = 0;
 
   // voices + mixer
@@ -139,6 +141,10 @@ class Engine extends AudioWorkletProcessor {
         this.phase = m.from;
         this.nextK = Math.ceil(m.from);
         this.resolveGlobal(this.nextK - 1);
+        break;
+      case 'loop':
+        this.loop0 = m.s0;
+        this.loop1 = m.s1;
         break;
       case 'rec':
         if (!m.on && this.recOn) this.flushRec(true);
@@ -305,10 +311,14 @@ class Engine extends AudioWorkletProcessor {
     const swing = (SWING[R.swing] - 50) / 50;
     const vol = R.volume;
     const vals = this.vals;
+    // a loop only catches the playhead once it is inside it (or before it): past it, the song plays on
+    const looping = this.loop1 > 0 && this.phase < this.loop1;
+    const end = looping ? this.loop1 : this.total;
+    const start = looping ? this.loop0 : 0;
 
     for (let s = 0; s < frames; s++) {
       if (this.playing) {
-        while (this.nextK < this.total && this.phase >= this.nextK + (this.nextK & 1 ? swing : 0)) this.triggerStep(this.nextK++);
+        while (this.nextK < end && this.phase >= this.nextK + (this.nextK & 1 ? swing : 0)) this.triggerStep(this.nextK++);
         for (let t = 0; t < N; t++) {
           if (this.ratLeft[t] > 0 && this.phase >= this.ratAt[t]) {
             this.ratchetHit(t);
@@ -317,12 +327,12 @@ class Engine extends AudioWorkletProcessor {
           }
         }
         this.phase += inc;
-        if (this.phase >= this.total) {
-          // song end: loop to the top
-          this.phase -= this.total;
-          this.nextK = 0;
+        if (this.phase >= end) {
+          // loop end (or song end): back to the loop start (or the top)
+          this.phase += start - end;
+          this.nextK = start;
           this.ratLeft.fill(0);
-          this.resolveGlobal(-1);
+          this.resolveGlobal(start - 1);
         }
       }
 

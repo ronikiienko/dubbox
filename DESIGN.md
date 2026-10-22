@@ -85,7 +85,8 @@ There are **no knobs**. Everything is per note, and the song-wide values are row
 ## 3. Sequencer: one linear song
 
 - The whole track is one timeline: **300 bars × 16 steps = 4800 steps per track** (10 min at 120 bpm). It's fixed for now (`SONG_BARS` in `state.ts`).
-- No loops, patterns or per-track lengths. Playback runs from the start marker to the end, then loops to bar 1.
+- No patterns or per-track lengths. Playback runs from the start marker to the end, then loops to bar 1.
+- **Loop region** (L or LOOP): loops the selection's steps, or the bar under the playhead when nothing is selected; the same again = off. Setting it moves the start marker to its start; if the playhead is already past it, playback jumps there. A playhead before the loop runs into it. Shown as an accent bracket on the ruler. Transport state only: not saved.
 - Grid resolution is 16th steps only. Nothing can be placed off the grid; swing is the only timing offset.
 - Steps are on/off (click toggles). No accents or velocity: emphasis comes from per-note values (Lvl, LP, Dist…).
 - **Drag sideways** from a step = paint the clicked step's new state across every step you pass.

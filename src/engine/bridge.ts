@@ -11,6 +11,7 @@ export type ToEngine =
   | { t: 'flags'; i: number; mute: boolean; solo: boolean }
   | { t: 'throw'; i: number; on: boolean }
   | { t: 'play'; on: boolean; from: number } // from = song step
+  | { t: 'loop'; s0: number; s1: number } // loop steps s0..s1 (exclusive); s1 = 0 = off
   | { t: 'rec'; on: boolean };
 
 export type FromEngine =
