@@ -45,6 +45,11 @@ Press **?** in the app for the full list.
 
 **SAVE / LOAD** export and import the project as a JSON file. Use them to move a song between browsers or machines.
 
+## Todo: current challenges
+
+- **Balancing simplicity and flexibility,** especially with effects. Right now they're quite limited and premade, but a full mixer with effect chains would bring back the overwhelm this app is trying to avoid. The goal is to find the middle ground.
+- **A bit more synth options,** like attack, or some other way to get long, continuous sounds (pads, drones) instead of only one-shots.
+
 ## Run locally
 
 ```sh
