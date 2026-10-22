@@ -50,7 +50,7 @@ const ROW_MAX = 60;
 const RULER_H = 20;
 const SUB_MIN = 6; // value rows are compact (a heat strip) and stretch between these to fill the screen
 const SUB_MAX = 14;
-const HEAT_BELOW = 24;
+const HEAT_BELOW = 24; // rows shorter than this (closed, or mid-animation) draw nothing
 const LABEL_COLS = 3;
 const GROUP_GAP = 8; // breathing room under each track's last row (its name hangs below the row) // rows shorter than this draw as heat, taller as bars
 const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
@@ -639,32 +639,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const d = PARAM_BY_ID[id];
         const rowTop = subTop(ti, j);
         const height = rowH(ti, j);
-        if (height < HEAT_BELOW) {
-          // compact: a tiny bar chart of the actual values (≈1 px per position), so sweeps and throws show as shapes
-          const arr = tr.locks[id];
-          const span = height - 2;
-          const base = rowTop + height - 1;
-          let held = g ? noteValue(ti, id, first) : 0;
-          for (let si = first; si <= last; si++) {
-            if (!tr.s[si]) continue;
-            const own = arr[si] !== NO_LOCK;
-            if (g && own) held = fromIndex(d, arr[si]);
-            const n = g ? held : noteValue(ti, id, si);
-            const x = si * CELL - x0;
-            ctx.fillStyle = own || g ? 'rgba(230, 223, 204, 0.75)' : COLORS.line;
-            // GLOBAL values run on, so their bars join into a stepped line
-            const bx = g ? x : x + 3, bw = g ? CELL : CELL - 6;
-            if (d.bipolar) {
-              const mid = rowTop + 1 + span / 2;
-              const bh = Math.max(1, Math.abs(n - 0.5) * span);
-              ctx.fillRect(bx, n >= 0.5 ? mid - bh : mid, bw, bh);
-            } else {
-              const bh = Math.max(1, n * span);
-              ctx.fillRect(bx, base - bh, bw, bh);
-            }
-          }
-          return;
-        }
+        // compact rows show nothing: they're only there to be clicked open
+        if (height < HEAT_BELOW) return;
         const pad = padTop(ti, j);
         const span = barSpan(ti, j);
         const bottom = rowTop + height - padBottom(ti, j);
