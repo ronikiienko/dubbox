@@ -37,6 +37,7 @@ const ROW_H = 52;
 const RULER_H = 20;
 const PAD = 9;
 const SUB_H = 22; // per-note bar rows of an expanded track
+const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
 const COLORS = {
   bg: '#0d0d0c',
   cell: '#1f1e1b',
@@ -77,6 +78,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let follow = true; // keep the playhead in view while playing
   let expanded = -1; // track showing its per-note bar rows
   let resizeObs: ResizeObserver | undefined;
+  let spacerEl: HTMLElement;
+  let hot: { ti: number; sub: number } | null = null; // bar row under the mouse, drawn tall
+  let subLabels: HTMLElement[][] = [];
 
   // selection, clipboard, undo
   let sel: Region | null = null;
@@ -286,13 +290,43 @@ export function mountUI(root: HTMLElement, initial: Project) {
   // Each track has a main lane; the expanded track adds one bar row per lockable knob.
 
   const subRows = (ti: number) => (ti === expanded ? lockIds(ti) : []);
-  const laneH = (ti: number) => ROW_H + subRows(ti).length * SUB_H;
+  const isHot = (ti: number, j: number) => !!hot && hot.ti === ti && hot.sub === j;
+  const rowH = (ti: number, j: number) => (isHot(ti, j) ? HOT_H : SUB_H);
+  const rowPad = (ti: number, j: number) => (isHot(ti, j) ? 13 : 2); // hot rows print values above the bars
+  const laneH = (ti: number) => subRows(ti).reduce((y, _, j) => y + rowH(ti, j), ROW_H);
   const laneTop = (ti: number) => {
     let y = RULER_H;
     for (let i = 0; i < ti; i++) y += laneH(i);
     return y;
   };
   const totalH = () => laneTop(TRACKS.length);
+  const subTop = (ti: number, j: number) => {
+    let y = laneTop(ti) + ROW_H;
+    for (let k = 0; k < j; k++) y += rowH(ti, k);
+    return y;
+  };
+
+  function sizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = scroller.clientWidth, hh = totalH();
+    spacerEl.style.height = `${hh}px`;
+    canvas.width = w * dpr;
+    canvas.height = hh * dpr;
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${hh}px`;
+    canvas.getContext('2d')!.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  /** Grow the bar row under the mouse (labels follow), shrink the previous one. */
+  function setHot(next: { ti: number; sub: number } | null) {
+    if (hot?.ti === next?.ti && hot?.sub === next?.sub) return;
+    hot = next;
+    subLabels.forEach((labels, ti) => labels.forEach((el, j) => {
+      el.style.height = el.style.lineHeight = `${rowH(ti, j)}px`;
+      el.classList.toggle('hot', isHot(ti, j));
+    }));
+    sizeCanvas();
+  }
 
   function setLock(ti: number, id: string, si: number, v: number) {
     const arr = p.tracks[ti].locks[id];
@@ -320,23 +354,15 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   function timeline(): HTMLElement {
     scroller = h('div', 'scroller');
-    const spacer = h('div', 'spacer');
-    spacer.style.width = `${SONG_STEPS * CELL}px`;
-    spacer.style.height = `${totalH()}px`;
+    spacerEl = h('div', 'spacer');
+    spacerEl.style.width = `${SONG_STEPS * CELL}px`;
+    spacerEl.style.height = `${totalH()}px`;
     canvas = h('canvas');
-    spacer.append(canvas);
-    scroller.append(spacer);
+    spacerEl.append(canvas);
+    scroller.append(spacerEl);
 
     resizeObs?.disconnect();
-    resizeObs = new ResizeObserver(() => {
-      const dpr = window.devicePixelRatio || 1;
-      const w = scroller.clientWidth, hh = totalH();
-      canvas.width = w * dpr;
-      canvas.height = hh * dpr;
-      canvas.style.width = `${w}px`;
-      canvas.style.height = `${hh}px`;
-      canvas.getContext('2d')!.setTransform(dpr, 0, 0, dpr, 0, 0);
-    });
+    resizeObs = new ResizeObserver(sizeCanvas);
     resizeObs.observe(scroller);
 
     // Manual scrolling (scrollbar, trackpad, wheel) stops follow mode.
@@ -351,10 +377,10 @@ export function mountUI(root: HTMLElement, initial: Project) {
       for (let ti = 0; ti < TRACKS.length; ti++) {
         const top = laneTop(ti);
         if (y < top + ROW_H) return { si, ti, sub: -1, rowTop: top, ruler: false };
-        const rows = subRows(ti).length;
-        if (y < top + ROW_H + rows * SUB_H) {
-          const sub = Math.floor((y - top - ROW_H) / SUB_H);
-          return { si, ti, sub, rowTop: top + ROW_H + sub * SUB_H, ruler: false };
+        let rt = top + ROW_H;
+        for (let j = 0; j < subRows(ti).length; j++) {
+          if (y < rt + rowH(ti, j)) return { si, ti, sub: j, rowTop: rt, ruler: false };
+          rt += rowH(ti, j);
         }
       }
       return { si, ti: -1, sub: -1, rowTop: 0, ruler: false };
@@ -363,11 +389,14 @@ export function mountUI(root: HTMLElement, initial: Project) {
     // main lane: click = toggle on/off · drag sideways = paint · drag vertically = pitch
     let drag: { ti: number; si0: number; last: number; y: number; note: number; mode: 'pending' | 'paint' | 'note'; paint: StepState } | null = null;
     // bar rows: drag up/down = that note's value · drag sideways = draw across notes (absolute height)
-    let bars: { ti: number; id: string; si0: number; last: number; y: number; idx0: number; rowTop: number; mode: 'pending' | 'nudge' | 'draw' } | null = null;
+    let bars: { ti: number; sub: number; id: string; si0: number; last: number; y: number; idx0: number; rowTop: number; mode: 'pending' | 'nudge' | 'draw' } | null = null;
 
-    const idxFromY = (id: string, y: number, rowTop: number) => {
-      const d = PARAM_BY_ID[id];
-      const n = clamp(1 - (y - rowTop - 2) / (SUB_H - 4));
+    /** Absolute drawing: mouse height in the row → position (same geometry as drawTimeline). */
+    const idxFromY = (b: NonNullable<typeof bars>, y: number) => {
+      const d = PARAM_BY_ID[b.id];
+      const pad = rowPad(b.ti, b.sub);
+      const span = rowH(b.ti, b.sub) - pad - 2;
+      const n = clamp(1 - (y - b.rowTop - pad) / span);
       return Math.round(n * (d.positions - 1));
     };
 
@@ -402,7 +431,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       if (sub >= 0) {
         const id = subRows(ti)[sub];
         canvas.setPointerCapture(e.pointerId);
-        bars = { ti, id, si0: si, last: si, y: e.clientY, idx0: toIndex(PARAM_BY_ID[id], noteValue(ti, id, si)), rowTop, mode: 'pending' };
+        bars = { ti, sub, id, si0: si, last: si, y: e.clientY, idx0: toIndex(PARAM_BY_ID[id], noteValue(ti, id, si)), rowTop, mode: 'pending' };
         return;
       }
       if (e.altKey) {
@@ -416,6 +445,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
     canvas.addEventListener('pointermove', (e) => {
       const h0 = hit(e);
       hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
+      // the hot row stays locked while a gesture is running, so a stroke never jumps rows
+      if (!bars && !drag && !selDrag) setHot(h0.sub >= 0 ? { ti: h0.ti, sub: h0.sub } : null);
       if (selDrag) {
         if (h0.si !== selDrag.s0 || h0.ti !== selDrag.t0) selDrag.moved = true;
         if (selDrag.moved || !selDrag.ruler) updateSel(h0.si, h0.ti);
@@ -433,7 +464,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
           const max = PARAM_BY_ID[b.id].positions - 1;
           setLock(b.ti, b.id, b.si0, clamp(b.idx0 + Math.round((b.y - e.clientY) / 8), 0, max));
         } else if (b.mode === 'draw') {
-          const idx = idxFromY(b.id, e.offsetY, b.rowTop);
+          const idx = idxFromY(b, e.offsetY);
           const lo = Math.min(b.last, si), hi = Math.max(b.last, si);
           for (let i = lo; i <= hi; i++) if (tr.s[i]) setLock(b.ti, b.id, i, idx);
           b.last = si;
@@ -477,7 +508,10 @@ export function mountUI(root: HTMLElement, initial: Project) {
       bars = null;
       pending = null;
     };
-    canvas.addEventListener('pointerleave', () => (hover = null));
+    canvas.addEventListener('pointerleave', () => {
+      hover = null;
+      if (!bars) setHot(null);
+    });
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
 
@@ -574,24 +608,41 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
       // bar rows of the expanded track: one bar per note, height = value
       subRows(ti).forEach((id, j) => {
-        const rowTop = top + ROW_H + j * SUB_H;
+        const d = PARAM_BY_ID[id];
+        const rowTop = subTop(ti, j);
+        const height = rowH(ti, j);
+        const pad = rowPad(ti, j);
+        const span = height - pad - 2;
+        const showValues = isHot(ti, j);
+        if (showValues) {
+          ctx.fillStyle = COLORS.cell;
+          ctx.fillRect(0, rowTop, w, height);
+        }
         ctx.fillStyle = COLORS.cell;
-        ctx.fillRect(0, rowTop + SUB_H - 1, w, 1);
+        ctx.fillRect(0, rowTop + height - 1, w, 1);
         const arr = tr.locks[id];
         for (let si = first; si <= last; si++) {
           if (!tr.s[si]) continue;
           const locked = arr[si] !== NO_LOCK;
           const n = noteValue(ti, id, si);
-          const span = SUB_H - 4;
+          const x = si * CELL - x0;
           ctx.fillStyle = locked ? COLORS.text : COLORS.line;
-          if (PARAM_BY_ID[id].bipolar) {
+          if (d.bipolar) {
             // grows up/down from the centre line (e.g. Pan: up = right, down = left)
-            const mid = rowTop + 2 + span / 2;
+            const mid = rowTop + pad + span / 2;
             const bh = Math.max(2, Math.abs(n - 0.5) * span);
-            ctx.fillRect(si * CELL - x0 + 4, n >= 0.5 ? mid - bh : mid, CELL - 8, bh);
+            ctx.fillRect(x + 4, n >= 0.5 ? mid - bh : mid, CELL - 8, bh);
           } else {
             const bh = Math.max(2, n * span);
-            ctx.fillRect(si * CELL - x0 + 4, rowTop + SUB_H - 2 - bh, CELL - 8, bh);
+            ctx.fillRect(x + 4, rowTop + height - 2 - bh, CELL - 8, bh);
+          }
+          if (showValues) {
+            // position as a number: 0–8, or −4…+4 around the centre for bipolar values
+            const idx = toIndex(d, n);
+            const half = (d.positions - 1) / 2;
+            const label = d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
+            ctx.fillStyle = locked ? COLORS.text : COLORS.dim;
+            ctx.fillText(label, x + CELL / 2, rowTop + 7);
           }
         }
       });
@@ -684,6 +735,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const scrollLeft = scroller?.scrollLeft ?? 0;
     knobs = [];
     heads = [];
+    subLabels = [];
     names = [];
     root.innerHTML = '';
 
@@ -743,7 +795,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
       headCol.append(head);
       heads.push(head);
       names.push(name);
-      for (const id of subRows(ti)) headCol.append(h('div', 'sublabel', PARAM_BY_ID[id].label));
+      subLabels[ti] = subRows(ti).map((id, j) => {
+        const el = h('div', 'sublabel', PARAM_BY_ID[id].label);
+        el.style.height = el.style.lineHeight = `${rowH(ti, j)}px`;
+        headCol.append(el);
+        return el;
+      });
     });
     tracks.append(headCol, timeline());
 

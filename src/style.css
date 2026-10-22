@@ -63,6 +63,7 @@ header {
 .name { font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
 .name:hover { color: var(--accent); }
 .sublabel { height: 22px; line-height: 22px; padding-left: 14px; color: var(--dim); font-size: 10px; }
+.sublabel.hot { color: var(--accent); }
 .name.throw { color: var(--red); }
 
 .toggles { display: flex; gap: 4px; }
