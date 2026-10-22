@@ -108,6 +108,7 @@ Knobs: 5 FX + 4 global = **9**. Everything else is per note.
 - **⌘C / ⌘X** copy / cut. **⌘V** pastes with its top-left at the step under the mouse; hold ⌘ to see a dashed outline of where it lands. Bar selections from the ruler always paste onto the same tracks. **Delete** clears the selection.
 - **⌘D** duplicates the selection right after itself and moves the selection onto the copy, so repeated ⌘D keeps extending (4 → 8 → 12 bars…).
 - Paste **overwrites** the target area (empty steps included). Notes carry pitch, accent, slide and per-note values. Across tracks, Lvl/Dly/Rev/Phs carry over; instrument values only onto the same track.
+- **D = dice**: every value of the selected notes (or the note under the mouse) moves by a random −1 / 0 / +1 position. With the mouse over a bar row, only that row is diced. Press again to keep wandering; each press is one undo step.
 - **⌘Z / ⇧⌘Z** undo / redo (100 steps) for all note edits: clicks, paints, drags, bar edits, region edits. Mutes/solo and global knobs are not in the history.
 
 ### 3.3 Stepped knobs

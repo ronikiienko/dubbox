@@ -81,7 +81,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   // selection, clipboard, undo
   let sel: Region | null = null;
   let clip: Clip | null = null;
-  let hover: { ti: number; si: number } | null = null; // step under the mouse (paste target)
+  let hover: { ti: number; si: number; sub: number } | null = null; // step (and bar row) under the mouse
   let modHeld = false; // ⌘/Ctrl down: show where a paste would land
   const undoStack: Snapshot[] = [];
   let redoStack: Snapshot[] = [];
@@ -253,6 +253,30 @@ export function mountUI(root: HTMLElement, initial: Project) {
     return false;
   }
 
+  /**
+   * Dice: nudge every value of the selected notes (or the hovered note) by −1/0/+1 position.
+   * Hovering a bar row limits it to that row. Repeated presses keep wandering; each is one undo step.
+   */
+  function dice() {
+    const region: Region | null = sel ?? (hover ? { t0: hover.ti, t1: hover.ti, s0: hover.si, s1: hover.si + 1 } : null);
+    if (!region) return;
+    const onlyRow = hover && hover.sub >= 0 ? subRows(hover.ti)[hover.sub] : null;
+    edit(() => {
+      for (let ti = region.t0; ti <= region.t1; ti++) {
+        const tr = p.tracks[ti];
+        const ids = onlyRow ? lockIds(ti).filter((id) => id === onlyRow) : lockIds(ti);
+        for (let si = region.s0; si < region.s1; si++) {
+          if (!tr.s[si]) continue;
+          for (const id of ids) {
+            const d = PARAM_BY_ID[id];
+            const step = Math.floor(Math.random() * 3) - 1;
+            tr.locks[id][si] = clamp(toIndex(d, noteValue(ti, id, si)) + step, 0, d.positions - 1);
+          }
+        }
+      }
+    });
+  }
+
   function setFollow(on: boolean) {
     follow = on;
     followBtn.classList.toggle('lit', on);
@@ -391,7 +415,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     });
     canvas.addEventListener('pointermove', (e) => {
       const h0 = hit(e);
-      hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si } : null;
+      hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
       if (selDrag) {
         if (h0.si !== selDrag.s0 || h0.ti !== selDrag.t0) selDrag.moved = true;
         if (selDrag.moved || !selDrag.ruler) updateSel(h0.si, h0.ti);
@@ -724,7 +748,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const help = h('div', 'help',
       'space play · 1–5 mute · shift+1–5 solo · hold Q W E R T = dub throw · ' +
       'click step on→accent→off · drag sideways = paint · drag up/down or wheel on a step = pitch · click track name = sound per note · alt-click (bass/chord) = slide · ' +
-      'click ruler = play from bar · drag ruler = select bars · shift-drag = select · ⌘C/X/V copy/cut/paste at mouse · ⌘D duplicate · ⌘Z undo · wheel = scroll · F = follow');
+      'click ruler = play from bar · drag ruler = select bars · shift-drag = select · ⌘C/X/V copy/cut/paste at mouse · ⌘D duplicate · D dice selection/hovered note · ⌘Z undo · wheel = scroll · F = follow');
 
     root.append(header, tracks, fx, help);
     p.tracks.forEach((_, i) => renderHead(i));
@@ -764,6 +788,10 @@ export function mountUI(root: HTMLElement, initial: Project) {
       return;
     }
     if (e.code === 'Escape') sel = null;
+    if (e.code === 'KeyD' && !e.metaKey && !e.ctrlKey && !e.repeat) {
+      dice();
+      return;
+    }
     if ((e.code === 'Backspace' || e.code === 'Delete') && sel) {
       const r0 = sel;
       edit(() => clear(p, r0));
