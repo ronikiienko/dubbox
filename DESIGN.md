@@ -86,7 +86,7 @@ Knobs: 5 FX + 4 global = **9**. Everything else is per note.
 - The whole track is one timeline: **300 bars × 16 steps = 4800 steps per track** (10 min at 120 bpm). It's fixed for now (`SONG_BARS` in `state.ts`).
 - No loops, patterns or per-track lengths. Playback runs from the start marker to the end, then loops to bar 1.
 - Grid resolution is 16th steps only. Nothing can be placed off the grid; swing is the only timing offset.
-- Step states: `off → on → accent → off` (click cycles).
+- Steps are on/off (click toggles). No accents or velocity: emphasis comes from per-note values (Lvl, Tone, Dist…).
 - **Drag sideways** from a step = paint the clicked step's new state across every step you pass.
 - **Every step has a pitch**: drag a step vertically, or wheel over an active step → semitone offset −12..+12. Shown as a small number. Synths: relative to Root. Drums: shifts the voice (KICK pitch, HAT/PERC tone) by that many semitones.
 - **Slide** (BASS, CHORD): **Alt-click** a step to toggle it, drawn as a tie into the next step. Like a 303: the slid note's volume decays to a 30% sustain level and holds there until the next step. The filter envelope keeps decaying as normal, so slid notes aren't louder or brighter. If that step is on, the pitch glides into it (~60 ms) without retriggering the envelope. If it's off, the note just ends there.
@@ -107,7 +107,7 @@ Knobs: 5 FX + 4 global = **9**. Everything else is per note.
 - **Drag on the ruler** = select whole bars on all tracks (a plain ruler click still moves the start marker). **Shift-drag in the lanes** = rectangle of steps × tracks. **Esc** or a plain click in the lanes clears it.
 - **⌘C / ⌘X** copy / cut. **⌘V** pastes with its top-left at the step under the mouse; hold ⌘ to see a dashed outline of where it lands. Bar selections from the ruler always paste onto the same tracks. **Delete** clears the selection.
 - **⌘D** duplicates the selection right after itself and moves the selection onto the copy, so repeated ⌘D keeps extending (4 → 8 → 12 bars…).
-- Paste **overwrites** the target area (empty steps included). Notes carry pitch, accent, slide and per-note values. Across tracks, Lvl/Dly/Rev/Phs carry over; instrument values only onto the same track.
+- Paste **overwrites** the target area (empty steps included). Notes carry pitch, slide and per-note values. Across tracks every value carries over by knob position (slide only between synth tracks).
 - **D = dice**: every value of the selected notes (or the note under the mouse) moves by a random −1 / 0 / +1 position. With the mouse over a bar row, only that row is diced. Press again to keep wandering; each press is one undo step.
 - **⌘Z / ⇧⌘Z** undo / redo (100 steps) for all note edits: clicks, paints, drags, bar edits, region edits. Mutes/solo and global knobs are not in the history.
 
@@ -137,12 +137,12 @@ Saturation everywhere is `tanh`. Use 2× oversampling only in the synth filter a
 **KICK**
 - Sine oscillator. Pitch env: starts at `tune × 4`, exponential decay to `tune` with τ ≈ 30 ms.
 - Amp env: exponential decay, `Decay` → 0.1–1.2 s.
-- `tanh(x × 1.5)` drive → 4-pole ladder lowpass at `Tone` (150 Hz–12 kHz) with `Res`. Accent: +3 dB and slightly more drive.
+- `tanh(x × 1.5)` drive → 4-pole ladder lowpass at `Tone` (150 Hz–12 kHz), with `Res`.
 - Base pitch fixed at 50 Hz; per-step pitch ±12 st → ~25–100 Hz.
 
 **HAT**
 - White noise → 2-pole highpass at 8 kHz × pitch, Q 0.7 + 8 × `Res` → 2× one-pole lowpass at `Tone` (2–16 kHz).
-- Decay 15–600 ms (low = closed, high = open). Accent +3 dB.
+- Decay 15–600 ms (low = closed, high = open).
 
 **PERC**
 - Noise → bandpass at 1.4 kHz × pitch, Q 1 + 12 × `Res`, plus a 2 ms sine click at half that → 4-pole ladder lowpass at `Tone` (0.5–12 kHz).
@@ -154,7 +154,7 @@ Saturation everywhere is `tanh`. Use 2× oversampling only in the synth filter a
 - CHORD notes: root+0, +3, +7, +10 (minor 7), one octave above BASS.
 - One **4-pole ladder filter** (tanh stages), `Cutoff` 40 Hz–12 kHz (exp), `Res` 0–0.95 (self-oscillation just short of max).
 - One envelope (fast 2 ms attack, exp decay `Decay` 30 ms–2 s) drives both amp and filter.
-  - Filter env amount is fixed at +3 octaves (accent: +4.5 octaves, +3 dB).
+  - Filter env amount is fixed at +3 octaves.
 - Mono retrigger; glide only via slide.
 - Pitch loudness compensation: −2 dB per octave of step pitch above root (follows the glide).
 - Root: BASS base note = MIDI 29 + rootIndex (F1 by default), CHORD = +12.
@@ -236,7 +236,7 @@ interface Project {
   tracks: TrackState[];             // 5
 }
 interface TrackState {
-  s: Uint8Array;                    // 4800 steps: 0 off / 1 on / 2 accent
+  s: Uint8Array;                    // 4800 steps: 0 off / 1 on
   note: Int8Array;                  // semitone offset per step
   mute: boolean;
   solo: boolean;
@@ -291,7 +291,7 @@ worklet → main:
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
 - The timeline is one canvas, virtualized (only visible steps are drawn).
-- ■ on, ▣ accent, bar lines + numbers on the ruler, playhead = vertical line.
+- ■ on, bar lines + numbers on the ruler, playhead = vertical line.
 - **Ruler click** = set the start marker (bar-quantized). Play starts there, and Stop returns there.
 - **FOLLOW** (key `F`): while playing, the view scrolls smoothly with the playhead at 25% from the left. Any manual scroll turns it off.
 - Vertical mouse wheel scrolls the timeline horizontally (except over an active synth step, where it changes the note).

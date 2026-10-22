@@ -1,7 +1,7 @@
 import { Ladder, Noise, OnePole, SVF, Smooth, TAU, decayCoef, lpCoef, mtof, saw, tanh, timeCoef } from './dsp';
 
 export interface Voice {
-  trigger(accent: boolean, note: number): void;
+  trigger(note: number): void;
   process(): number;
 }
 
@@ -19,8 +19,6 @@ export class Kick implements Voice {
   private pDec: number;
   private tune = 50; // fixed base pitch; per-step pitch moves it
   private ratio = 1;
-  private drive = 1.5;
-  private gain = 1;
   constructor(private sr: number) {
     this.pDec = Math.exp(-1 / (0.03 * sr));
   }
@@ -29,13 +27,11 @@ export class Kick implements Voice {
     this.res = res;
     this.dec = decayCoef(decay, this.sr);
   }
-  trigger(accent: boolean, note: number) {
+  trigger(note: number) {
     this.ratio = ratio(note);
     this.ph = 0;
     this.amp = 1;
     this.pEnv = 1;
-    this.drive = accent ? 2.2 : 1.5;
-    this.gain = accent ? 1.15 : 1;
   }
   process() {
     if (this.amp < 1e-5) return 0;
@@ -44,7 +40,7 @@ export class Kick implements Voice {
     if (this.ph >= 1) this.ph -= 1;
     const x = Math.sin(TAU * this.ph) * this.amp;
     this.amp *= this.dec;
-    return this.filter.process(tanh(x * this.drive), this.tone, this.res, this.sr) * this.gain * 0.9;
+    return this.filter.process(tanh(x * 1.5), this.tone, this.res, this.sr) * 0.9;
   }
 }
 
@@ -66,10 +62,10 @@ export class Hat implements Voice {
     this.svf.set(Hat.BASE * this.ratio, this.q, this.sr);
     this.dec = decayCoef(decay, this.sr);
   }
-  trigger(accent: boolean, note: number) {
+  trigger(note: number) {
     this.ratio = ratio(note);
     this.svf.set(Hat.BASE * this.ratio, this.q, this.sr);
-    this.amp = accent ? 1.4 : 1;
+    this.amp = 1;
   }
   process() {
     if (this.amp < 1e-5) return 0;
@@ -102,10 +98,10 @@ export class Perc implements Voice {
     this.svf.set(Perc.BASE * this.ratio, this.q, this.sr);
     this.dec = decayCoef(decay, this.sr);
   }
-  trigger(accent: boolean, note: number) {
+  trigger(note: number) {
     this.ratio = ratio(note);
     this.svf.set(Perc.BASE * this.ratio, this.q, this.sr);
-    this.amp = accent ? 1.4 : 1;
+    this.amp = 1;
     this.click = 1;
     this.ph = 0;
   }
@@ -138,8 +134,7 @@ export class Synth implements Voice {
   private attacking = false;
   private atkInc: number;
   private dec = 0;
-  private envAmt = 3;
-  private gain = 1;
+  private envAmt = 3; // filter envelope depth, octaves
   private note = 0; // current pitch in semitones (float while gliding)
   private target = 0;
   private gliding = false;
@@ -185,20 +180,16 @@ export class Synth implements Voice {
     }
   }
 
-  trigger(accent: boolean, note: number) {
+  trigger(note: number) {
     this.note = this.target = note;
     this.gliding = false;
     this.attacking = true;
-    this.envAmt = accent ? 4.5 : 3;
-    this.gain = accent ? 1.4 : 1;
   }
 
   /** Slide into a note: glide the pitch, don't retrigger the envelope. */
-  glide(accent: boolean, note: number) {
+  glide(note: number) {
     this.target = note;
     this.gliding = true;
-    this.envAmt = accent ? 4.5 : 3;
-    this.gain = accent ? 1.4 : 1;
   }
 
   setHold(on: boolean) {
@@ -231,6 +222,6 @@ export class Synth implements Voice {
     osc /= Math.sqrt(this.ph.length);
 
     const fc = this.cutSm.next(this.cutoff) * Math.pow(2, this.envAmt * this.fenv);
-    return this.ladder.process(osc * 0.7, fc, this.res, this.sr) * this.env * this.gain * this.keyGain;
+    return this.ladder.process(osc * 0.7, fc, this.res, this.sr) * this.env * this.keyGain;
   }
 }

@@ -360,7 +360,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       return { si, ti: -1, sub: -1, rowTop: 0, ruler: false };
     };
 
-    // main lane: click = cycle off→on→accent · drag sideways = paint · drag vertically = pitch
+    // main lane: click = toggle on/off · drag sideways = paint · drag vertically = pitch
     let drag: { ti: number; si0: number; last: number; y: number; note: number; mode: 'pending' | 'paint' | 'note'; paint: StepState } | null = null;
     // bar rows: drag up/down = that note's value · drag sideways = draw across notes (absolute height)
     let bars: { ti: number; id: string; si0: number; last: number; y: number; idx0: number; rowTop: number; mode: 'pending' | 'nudge' | 'draw' } | null = null;
@@ -411,7 +411,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
         return;
       }
       canvas.setPointerCapture(e.pointerId);
-      drag = { ti, si0: si, last: si, y: e.clientY, note: tr.note[si], mode: 'pending', paint: ((tr.s[si] + 1) % 3) as StepState };
+      drag = { ti, si0: si, last: si, y: e.clientY, note: tr.note[si], mode: 'pending', paint: (tr.s[si] ? 0 : 1) as StepState };
     });
     canvas.addEventListener('pointermove', (e) => {
       const h0 = hit(e);
@@ -553,7 +553,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       for (let si = first; si <= last; si++) {
         const st = tr.s[si];
         const x = si * CELL - x0 + 1;
-        ctx.fillStyle = st === 2 ? COLORS.accent : st === 1 ? COLORS.accentDim : si % 4 === 0 ? COLORS.beat : COLORS.cell;
+        ctx.fillStyle = st ? COLORS.accentDim : si % 4 === 0 ? COLORS.beat : COLORS.cell;
         ctx.fillRect(x, y, CELL - 2, hh);
         if (!st) continue;
         if (tr.slide[si]) {
@@ -562,12 +562,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
           ctx.fillRect(x + CELL / 2, y + hh - 4, CELL, 3);
         }
         if (tr.note[si]) {
-          ctx.fillStyle = st === 2 ? COLORS.bg : COLORS.text;
+          ctx.fillStyle = COLORS.text;
           ctx.fillText((tr.note[si] > 0 ? '+' : '') + tr.note[si], x + (CELL - 2) / 2, y + hh / 2);
         }
         if (ids.some((id) => tr.locks[id][si] !== NO_LOCK)) {
           // this note has its own values
-          ctx.fillStyle = st === 2 ? COLORS.bg : COLORS.text;
+          ctx.fillStyle = COLORS.text;
           ctx.fillRect(x + CELL - 7, y + 2, 3, 3);
         }
       }
@@ -747,7 +747,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
     const help = h('div', 'help',
       'space play · 1–5 mute · shift+1–5 solo · hold Q W E R T = dub throw · ' +
-      'click step on→accent→off · drag sideways = paint · drag up/down or wheel on a step = pitch · click track name = sound per note · alt-click (bass/chord) = slide · ' +
+      'click step = on/off · drag sideways = paint · drag up/down or wheel on a step = pitch · click track name = sound per note · alt-click (bass/chord) = slide · ' +
       'click ruler = play from bar · drag ruler = select bars · shift-drag = select · ⌘C/X/V copy/cut/paste at mouse · ⌘D duplicate · D dice selection/hovered note · ⌘Z undo · wheel = scroll · F = follow');
 
     root.append(header, tracks, fx, help);

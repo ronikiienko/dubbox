@@ -187,11 +187,11 @@ class Engine extends AudioWorkletProcessor {
       if (v instanceof Synth) {
         // 303 slide: a slid step holds its note and glides into this one instead of retriggering
         const slidIn = k > 0 && tr.s[k - 1] && tr.slide[k - 1];
-        if (s && slidIn) v.glide(s === 2, tr.note[k]);
-        else if (s) v.trigger(s === 2, tr.note[k]);
+        if (s && slidIn) v.glide(tr.note[k]);
+        else if (s) v.trigger(tr.note[k]);
         v.setHold(!!s && !!tr.slide[k]);
       } else if (s) {
-        v.trigger(s === 2, tr.note[k]);
+        v.trigger(tr.note[k]);
       }
     }
   }

@@ -4,7 +4,7 @@ export const STEPS_PER_BAR = 16;
 export const SONG_BARS = 300; // 10 min at 120 bpm
 export const SONG_STEPS = SONG_BARS * STEPS_PER_BAR; // 4800
 
-export type StepState = 0 | 1 | 2; // off / on / accent
+export type StepState = 0 | 1; // off / on
 
 /** One lane of the song. Dense typed arrays: index = 16th step from song start. */
 export interface TrackState {
@@ -113,7 +113,7 @@ function deserialize(raw: { params?: Record<string, number>; tracks?: unknown[] 
       const st = rt as SavedTrack;
       for (const [si, s, note, slide] of st.hits) {
         if (si < 0 || si >= SONG_STEPS) continue;
-        tr.s[si] = s;
+        tr.s[si] = s ? 1 : 0; // accents (2) were removed
         tr.note[si] = note;
         tr.slide[si] = slide ? 1 : 0;
       }
@@ -131,7 +131,7 @@ function deserialize(raw: { params?: Record<string, number>; tracks?: unknown[] 
       const len = v1.length || STEPS_PER_BAR;
       for (let si = 0; si < SONG_STEPS; si++) {
         const step = v1.steps[si % len];
-        tr.s[si] = step?.s ?? 0;
+        tr.s[si] = step?.s ? 1 : 0;
         tr.note[si] = step?.note ?? 0;
       }
       tr.mute = !!v1.mute;
