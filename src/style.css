@@ -76,7 +76,9 @@ header {
 .tog.lit { color: var(--bg); background: var(--text); border-color: var(--text); }
 .tog.solo.lit { background: #7fb069; border-color: #7fb069; }
 
-.scroller { overflow-x: auto; overflow-y: hidden; scrollbar-color: var(--line) transparent; }
+/* no visible scrollbar: the wheel / trackpad scrolls the song, Follow keeps the playhead in view */
+.scroller { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.scroller::-webkit-scrollbar { display: none; }
 .spacer { position: relative; }
 .scroller canvas { position: sticky; left: 0; display: block; cursor: pointer; touch-action: none; }
 
