@@ -57,6 +57,10 @@ class Engine extends AudioWorkletProcessor {
   private drives = TRACKS.map(() => new Drive(this.sr));
   private phasers = TRACKS.map(() => new Phaser(this.sr));
   private lvlT = new Float64Array(N);
+  private dckT = new Float64Array(N); // Duck depth per track (0..1)
+  private duck = 0; // pump envelope: jumps to 1 on every audible kick, falls back within a beat
+  private duckAtk = false;
+  private duckA = timeCoef(0.002, sampleRate);
   private dlyT = new Float64Array(N);
   private revT = new Float64Array(N);
   private panT = new Float64Array(N);
@@ -187,6 +191,7 @@ class Engine extends AudioWorkletProcessor {
     }
 
     this.lvlT[t] = audible(this.tracks, t) ? lvlGain(R[mixId(t, 'lvl')]) : 0;
+    this.dckT[t] = t === 0 ? 0 : R[mixId(t, 'dck')];
     this.dlyT[t] = this.throws[t] ? 1 : R[mixId(t, 'dly')];
     this.revT[t] = R[mixId(t, 'rev')];
     this.panT[t] = R[mixId(t, 'pan')];
@@ -249,6 +254,7 @@ class Engine extends AudioWorkletProcessor {
         v.setHold(!!s && !!tr.slide[k]);
       } else if (s) {
         v.trigger(tr.note[k]);
+        if (t === 0) this.duckAtk = true; // kick → pump everything with Duck
       }
     }
   }
@@ -274,6 +280,8 @@ class Engine extends AudioWorkletProcessor {
     const inc = R.tempo / 60 / this.sr * 4;
     const swing = (SWING[R.swing] - 50) / 50;
     const vol = R.volume;
+    // pump release: back to ~1% within a quarter note, whatever the tempo
+    const duckRel = Math.exp(-1 / (0.22 * (60 / R.tempo) * this.sr));
     const vals = this.vals;
 
     for (let s = 0; s < frames; s++) {
@@ -289,11 +297,16 @@ class Engine extends AudioWorkletProcessor {
       }
 
       for (let t = 0; t < N; t++) vals[t] = this.voices[t].process();
+      if (this.duckAtk) {
+        this.duck += (1 - this.duck) * this.duckA; // 2 ms attack, no click
+        if (this.duck > 0.99) this.duckAtk = false;
+      } else this.duck *= duckRel;
 
       // per track: highpass → dist → phaser → fader → post-fader sends
       let dryL = 0, dryR = 0, dIn = 0, rIn = 0;
       for (let t = 0; t < N; t++) {
-        const g = this.lvl[t].next(this.lvlT[t]);
+        // Duck: up to −20 dB at the kick, swelling back
+        const g = this.lvl[t].next(this.lvlT[t]) * (1 - 0.9 * this.dckT[t] * this.duck);
         let x = vals[t];
         if (this.hpOn[t]) {
           this.hps[t].run(x);
