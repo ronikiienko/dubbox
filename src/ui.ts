@@ -1,4 +1,4 @@
-import { GLOBAL, PARAM_BY_ID, RATCHET, TRACKS, rowGroups, mixId, describe, pitchRange, fromIndex, lockIds, toIndex, toReal } from './params';
+import { GLOBAL, LENGTH, PARAM_BY_ID, RATCHET, TRACKS, rowGroups, mixId, describe, pitchRange, fromIndex, lockIds, toIndex, toReal } from './params';
 import {
   SONG_STEPS, STEPS_PER_BAR,
   type Project, type StepState, NO_LOCK, audible,
@@ -882,6 +882,22 @@ export function mountUI(root: HTMLElement, initial: Project) {
           ctx.fillStyle = COLORS.text;
           ctx.fillRect(x + CELL - 7, y + 2, 3, 3);
         }
+      }
+
+      // Length: a long note draws a band across the steps it holds (up to the next note); lit while it sounds
+      const lenId = ids.find((id) => id.endsWith('.len'));
+      for (let si = Math.max(0, first - 256); lenId && si <= last; si++) {
+        if (!tr.s[si]) continue;
+        const len = LENGTH[toReal(PARAM_BY_ID[lenId], noteValue(ti, lenId, si))];
+        if (!len) continue;
+        const stop = Math.min(SONG_STEPS, si + len);
+        let e = si + 1;
+        while (e < stop && !tr.s[e]) e++;
+        if (e <= si + 1 || e <= first) continue;
+        const held = t.playing && audible(p.tracks, ti) && t.phase >= si && t.phase < e;
+        ctx.fillStyle = held ? mix(COLORS.accentDim, '#ffc566', 0.4) : COLORS.accentDim;
+        const xa = Math.round((si + 1) * CELL - x0), xb = Math.round(e * CELL - x0) - (CELL >= 6 ? 1 : 0);
+        ctx.fillRect(xa - (CELL >= 6 ? 1 : 0), y + hh * 0.3, xb - xa + (CELL >= 6 ? 1 : 0), hh * 0.4);
       }
 
       // bar rows of the expanded track: one bar per note, height = value (the magnified one comes last, on top)

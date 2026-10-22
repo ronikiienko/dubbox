@@ -268,6 +268,7 @@ export class Synth implements Voice {
   private gliding = false;
   private glideA: number; // per-block glide coefficient (~60 ms, like a 303)
   private hold = false; // slide: sustain the envelope into the next step
+  private gateLeft = 0; // Length: samples the note holds at full level before Decay (Infinity = tie)
   private keyGain = 1; // loudness compensation for the current pitch
   private cutoff = 500;
   private res = 0;
@@ -292,7 +293,8 @@ export class Synth implements Voice {
   }
 
   /** Called once per block. */
-  set(cutoff: number, res: number, decay: number, root: number) {
+  set(cutoff: number, res: number, decay: number, root: number, attack: number) {
+    this.atkInc = 1 / (attack * this.sr);
     this.cutoff = cutoff;
     this.res = res;
     this.dec = decayCoef(decay, this.sr);
@@ -345,6 +347,11 @@ export class Synth implements Voice {
     this.hold = on;
   }
 
+  /** Length: hold full level this many samples once the attack is done (0 = one-shot, Infinity = until the next note). */
+  gate(samples: number) {
+    this.gateLeft = samples;
+  }
+
   process() {
     if (this.attacking) {
       this.env += this.atkInc;
@@ -355,8 +362,9 @@ export class Synth implements Voice {
       this.fenv = this.env;
     } else {
       if (this.env < 1e-5) return 0;
-      // slide holds the volume at a sustain level instead of letting it die
-      if (!this.hold || this.env > HOLD_LEVEL) this.env *= this.dec;
+      // Length holds full level; slide holds a sustain level instead of letting it die
+      if (this.gateLeft > 0) this.gateLeft--;
+      else if (!this.hold || this.env > HOLD_LEVEL) this.env *= this.dec;
       this.fenv *= this.dec;
     }
 

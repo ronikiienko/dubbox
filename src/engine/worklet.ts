@@ -1,7 +1,7 @@
 // The whole engine: clock, sequencer, voices, mixer, FX, master.
 // Runs on the audio thread. Talks to the UI only through `port` (see bridge.ts).
 
-import { GLOBAL, PARAMS, RATCHET, lvlGain, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
+import { ATTACK, GLOBAL, LENGTH, PARAMS, RATCHET, lvlGain, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
 import { NO_LOCK, audible, type TrackState } from '../state';
 import type { FromEngine, ToEngine } from './bridge';
 import { SVF, Smooth, timeCoef } from './dsp';
@@ -134,7 +134,11 @@ class Engine extends AudioWorkletProcessor {
       case 'play':
         this.playing = m.on;
         // release slide holds, otherwise a held note rings forever once the clock stops
-        for (const v of this.voices) if (v instanceof Synth) v.setHold(false);
+        for (const v of this.voices) {
+          if (!(v instanceof Synth)) continue;
+          v.setHold(false);
+          v.gate(0);
+        }
         this.curK.fill(-1);
         this.glideOn.fill(false);
         this.ratLeft.fill(0);
@@ -218,9 +222,9 @@ class Engine extends AudioWorkletProcessor {
       case 1: this.hat.set(R['hat.lp'], R['hat.res'], R['hat.decay'], R['hat.metal']); break;
       case 2: this.perc.set(R['perc.lp'], R['perc.res'], R['perc.decay']); break;
       case 3: this.snare.set(R['snare.lp'], R['snare.res'], R['snare.decay'], R['snare.snap']); break;
-      case 4: this.bass.set(R['bass.lp'], R['bass.res'], R['bass.decay'], R.root); break;
-      case 5: this.chord.set(R['chord.lp'], R['chord.res'], R['chord.decay'], R.root); break;
-      case 6: this.mel.set(R['mel.lp'], R['mel.res'], R['mel.decay'], R.root); break;
+      case 4: this.bass.set(R['bass.lp'], R['bass.res'], R['bass.decay'], R.root, ATTACK[R['bass.atk']]); break;
+      case 5: this.chord.set(R['chord.lp'], R['chord.res'], R['chord.decay'], R.root, ATTACK[R['chord.atk']]); break;
+      case 6: this.mel.set(R['mel.lp'], R['mel.res'], R['mel.decay'], R.root, ATTACK[R['mel.atk']]); break;
     }
   }
 
@@ -263,7 +267,10 @@ class Engine extends AudioWorkletProcessor {
         this.applyTrack(t);
       }
       if (!audible(this.tracks, t)) {
-        if (v instanceof Synth) v.setHold(false);
+        if (v instanceof Synth) {
+          v.setHold(false);
+          v.gate(0);
+        }
         continue;
       }
       if (s) this.ratLeft[t] = 0; // a new note cancels the previous one's remaining hits
@@ -280,7 +287,12 @@ class Engine extends AudioWorkletProcessor {
         const slidIn = k > 0 && tr.s[k - 1] && tr.slide[k - 1];
         if (s && slidIn) v.glide(semi, iv);
         else if (s) v.trigger(semi, iv);
-        if (s) this.armRatchet(t, semi);
+        if (s) {
+          this.armRatchet(t, semi);
+          // Length: hold this many steps at the current tempo (tie = until the next note)
+          const len = LENGTH[this.R[this.hpIds[t].slice(0, this.hpIds[t].indexOf('.')) + '.len']];
+          v.gate(len * ((this.sr * 60) / this.R.tempo / 4));
+        }
         v.setHold(!!s && !!tr.slide[k]);
       } else if (s) {
         v.trigger(tr.note[k]);

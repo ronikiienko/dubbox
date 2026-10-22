@@ -180,6 +180,8 @@ Saturation everywhere is `tanh`. Use 2× oversampling only in the synth filter a
   - Filter env amount is fixed at +3 octaves.
 - Mono retrigger; glide only via slide.
 - Pitch loudness compensation (BASS, MELODY): −2 dB per octave of pitch above root (follows the glide).
+- **Attack** (synths, per note, Note group): fade-in time 2 ms (default, the old snap) · 10 · 30 · 80 · 150 · 300 ms · 0.6 · 1.2 · 2.5 s. A retrigger rises from the current level. The filter envelope rises with it.
+- **Length** (synths, per note, Note group): how long the note holds at full level after its attack, before Decay takes over: **shot** (default: decays at once, the old behaviour) · 1 · 2 · 3 · 4 · 6 · 8 · 16 steps · **tie** (holds until the next note on the track: drones and pads). Measured in steps at the tempo of the note's step. The next note cuts it (it retriggers). Stop and mute release it. The filter envelope still decays during the hold (303-style). Main lane: a band from the note across the steps it holds (up to the next note), lit while it sounds.
 - Root: BASS base note = MIDI 29 + rootIndex (F1 by default), CHORD = +12.
 
 ### 5.2 Tape delay (the important one)

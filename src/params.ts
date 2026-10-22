@@ -83,9 +83,9 @@ export const TRACKS: TrackDef[] = [
   { name: 'HAT', voice: ['hat.metal', 'hat.lp', 'hat.res', 'hat.hp', 'hat.decay'] },
   { name: 'PERC', voice: ['perc.lp', 'perc.res', 'perc.hp', 'perc.decay'] },
   { name: 'SNARE', voice: ['snare.snap', 'snare.lp', 'snare.res', 'snare.hp', 'snare.decay'] },
-  { name: 'BASS', slide: true, voice: ['bass.lp', 'bass.res', 'bass.hp', 'bass.decay'] },
-  { name: 'CHORD', slide: true, voice: ['chord.size', 'chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
-  { name: 'MELODY', slide: true, voice: ['mel.lp', 'mel.res', 'mel.hp', 'mel.decay'] },
+  { name: 'BASS', slide: true, voice: ['bass.atk', 'bass.len', 'bass.lp', 'bass.res', 'bass.hp', 'bass.decay'] },
+  { name: 'CHORD', slide: true, voice: ['chord.size', 'chord.atk', 'chord.len', 'chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
+  { name: 'MELODY', slide: true, voice: ['mel.atk', 'mel.len', 'mel.lp', 'mel.res', 'mel.hp', 'mel.decay'] },
   // last, so instrument indices (mix ids, keys 1–6) stay put
   {
     name: 'GLOBAL', global: true,
@@ -124,6 +124,10 @@ export const SWING = [50, 54, 58, 62, 66, 75];
 
 /** Ratchet positions: hits per step. */
 export const RATCHET = [1, 2, 3, 4, 6, 8];
+/** Synth Attack, seconds per position: from today's snap to a slow swell. */
+export const ATTACK = [0.002, 0.01, 0.03, 0.08, 0.15, 0.3, 0.6, 1.2, 2.5];
+/** Synth Length, in steps the note holds before Decay: 0 = shot (decays at once), Infinity = tie (until the next note). */
+export const LENGTH = [0, 1, 2, 3, 4, 6, 8, 16, Infinity];
 
 /** Bitcrush positions: [bits, sample rate Hz]. 1 = SP-1200 (12-bit, 26 kHz), then down to 4-bit 2.5 kHz. */
 export const CRUSH: [number, number][] = [
@@ -189,6 +193,8 @@ const DESCRIPTIONS: Record<string, string> = {
   'kick.punch': 'Pitch drop at the hit. 0 = flat sub boom, top = hard knock.',
   'kick.click': 'Beater click on the attack. 0 = none.',
   'chord.size': 'Chord size: octave, 5th, triad, 7th, 9th. Voiced automatically.',
+  atk: 'Fade-in time. 0 = snappy, top = slow 2.5 s swell (pads).',
+  len: 'How long the note holds before Decay: shot = decays at once, 1–16 steps, tie = until the next note (drones).',
   scale: 'Scale of BASS, CHORD, MELODY, dark → bright.',
   root: 'Key: the note every scale starts on.',
   tempo: 'Beats per minute.',
@@ -246,7 +252,11 @@ const core = (k: string, lp: [number, number, number], res: number, decay: [numb
 ];
 
 // Decay (and synth LP) default to the middle position, so every note can go either way.
-const synthParams = (k: string, lp: number, decay: number) => core(k, around(lp, 8), 0.25, around(decay, 6));
+const synthParams = (k: string, lp: number, decay: number) => [
+  p({ id: `${k}.atk`, label: 'Attack', min: 0, max: 8, def: 0, curve: 'step', steps: ATTACK.map(sec) }),
+  p({ id: `${k}.len`, label: 'Length', min: 0, max: 8, def: 0, curve: 'step', steps: LENGTH.map((l) => (l === 0 ? 'shot' : l === Infinity ? 'tie' : String(l))) }),
+  ...core(k, around(lp, 8), 0.25, around(decay, 6)),
+];
 
 export const PARAMS: ParamDef[] = [
   // global
