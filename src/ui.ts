@@ -81,6 +81,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let startStep = 0; // where Play starts (set by clicking the ruler)
   let follow = true; // keep the playhead in view while playing
   let expanded = -1; // track showing its per-note bar rows
+  let closing = -1; // track whose rows are folding away (still drawn until they reach 0)
   let resizeObs: ResizeObserver | undefined;
   let help: HTMLElement, helpBtn: HTMLButtonElement;
   let helpOpen = false;
@@ -237,7 +238,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   // ---- lane geometry ----------------------------------------------------
   // Each track has a main lane; the expanded track adds one bar row per lockable knob.
 
-  const subRows = (ti: number) => (ti === expanded ? lockIds(ti) : []);
+  const subRows = (ti: number) => (ti === expanded || ti === closing ? lockIds(ti) : []);
   const isHot = (ti: number, j: number) => !!hot && hot.ti === ti && hot.sub === j;
   const rowH = (ti: number, j: number) => rowAnim.get(`${ti}:${j}`) ?? SUB_H;
   const padTop = (ti: number, j: number) => (isHot(ti, j) ? HOT_PAD_TOP : 2);
@@ -306,7 +307,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     subLabels.forEach((labels, ti) => labels.forEach((el, j) => {
       const key = `${ti}:${j}`;
       const cur = rowAnim.get(key) ?? SUB_H;
-      const target = isHot(ti, j) ? HOT_H : SUB_H;
+      const target = ti === closing ? 0 : isHot(ti, j) ? HOT_H : SUB_H;
       const next = Math.abs(target - cur) < 0.5 ? target : cur + (target - cur) * k;
       el.classList.toggle('hot', isHot(ti, j));
       if (next === cur) return;
@@ -315,6 +316,21 @@ export function mountUI(root: HTMLElement, initial: Project) {
       changed = true;
     }));
     if (changed) sizeCanvas();
+    // the folding track has reached 0: drop its rows for good
+    if (closing >= 0 && lockIds(closing).every((_, j) => (rowAnim.get(`${closing}:${j}`) ?? 0) === 0)) {
+      closing = -1;
+      build();
+    }
+  }
+
+  /** Click a track name: its rows unfold from 0 (and the open one, if any, folds away). */
+  function toggleTrack(ti: number) {
+    const prev = expanded;
+    const midFold = ti === closing; // reopened while folding: unfold from where it is
+    expanded = expanded === ti ? -1 : ti;
+    closing = prev >= 0 && prev !== expanded ? prev : -1;
+    if (expanded >= 0 && !midFold) lockIds(expanded).forEach((_, j) => rowAnim.set(`${expanded}:${j}`, 0));
+    build();
   }
 
   function setLock(ti: number, id: string, si: number, v: number) {
@@ -622,6 +638,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const d = PARAM_BY_ID[id];
         const rowTop = subTop(ti, j);
         const height = rowH(ti, j);
+        if (height < 1) return;
+        // rows unfolding / folding are shorter than their bars: clip to the row
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, rowTop, w, height);
+        ctx.clip();
         const pad = padTop(ti, j);
         const span = barSpan(ti, j);
         const bottom = rowTop + height - padBottom(ti, j);
@@ -659,6 +681,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
             ctx.fillText(label, x + CELL / 2, rowTop + 7);
           }
         }
+        ctx.restore();
       });
       ctx.globalAlpha = 1;
     }
@@ -743,7 +766,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const scrollLeft = scroller?.scrollLeft ?? 0;
     heads = [];
     subLabels = [];
-    rowAnim.clear();
     hot = null;
     names = [];
     root.innerHTML = '';
@@ -796,8 +818,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
         ? 'click = show the song-wide values (scale, key, tempo, FX)'
         : `click = show sound per note · hold ${THROW_KEYS[ti].slice(3)} = dub throw · ${ti + 1} = mute · shift+${ti + 1} = solo`;
       name.addEventListener('click', () => {
-        expanded = expanded === ti ? -1 : ti;
-        build();
+        toggleTrack(ti);
       });
       const toggles = h('div', 'toggles');
       if (!td.global) toggles.append(
