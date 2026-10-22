@@ -82,7 +82,7 @@ export const TRACKS: TrackDef[] = [
   { name: 'HAT', voice: ['hat.lp', 'hat.res', 'hat.hp', 'hat.decay'] },
   { name: 'PERC', voice: ['perc.lp', 'perc.res', 'perc.hp', 'perc.decay'] },
   { name: 'BASS', slide: true, voice: ['bass.lp', 'bass.res', 'bass.hp', 'bass.decay'] },
-  { name: 'CHORD', slide: true, voice: ['chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
+  { name: 'CHORD', slide: true, voice: ['chord.type', 'chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
   { name: 'MELODY', slide: true, voice: ['mel.lp', 'mel.res', 'mel.hp', 'mel.decay'] },
 ];
 
@@ -96,8 +96,22 @@ export const lockIds = (i: number) => [
 
 export const SWING = [50, 54, 58, 62, 66, 75];
 
+/** CHORD types, dark → bright: 4 intervals over the root. 12+ = an octave above where that tone lands. */
+export const CHORDS: [string, number[]][] = [
+  ['oct', [0, 12, 0, 12]],
+  ['5th', [0, 7, 0, 12]],
+  ['m', [0, 3, 7, 12]],
+  ['m7', [0, 3, 7, 10]],
+  ['m9', [0, 3, 10, 14]],
+  ['sus4', [0, 5, 7, 12]],
+  ['M', [0, 4, 7, 12]],
+  ['M7', [0, 4, 7, 11]],
+  ['7', [0, 4, 7, 10]],
+];
+
 /** One-line explanations of the per-note values, shown when a value row is expanded. */
 const DESCRIPTIONS: Record<string, string> = {
+  type: 'Chord type. Voiced around one centre, so changes move smoothly.',
   lp: 'Lowpass. Lower = darker, softer.',
   res: 'Filter resonance. Higher = ringing, squelchy.',
   hp: 'Highpass. Cuts the low end. 0 = off.',
@@ -156,6 +170,7 @@ export const PARAMS: ParamDef[] = [
   ...core('hat', [2000, 16000, 16000], 0, around(0.06, 8)),
   ...core('perc', [500, 12000, 12000], 0.25, around(0.12, 4)),
   ...synthParams('bass', 220, 0.25),
+  p({ id: 'chord.type', label: 'Type', min: 0, max: 8, def: 3, curve: 'step', steps: CHORDS.map((c) => c[0]) }),
   ...synthParams('chord', 600, 0.35),
   ...synthParams('mel', 1500, 0.3),
 

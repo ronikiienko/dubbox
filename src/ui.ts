@@ -680,7 +680,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
             // position as a number: 0–8, or −4…+4 around the centre for bipolar values
             const idx = toIndex(d, n);
             const half = (d.positions - 1) / 2;
-            const label = d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
+            const label = d.steps ? d.steps[idx] : d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
             ctx.fillStyle = locked ? COLORS.text : COLORS.dim;
             ctx.fillText(label, x + CELL / 2, rowTop + 7);
           }

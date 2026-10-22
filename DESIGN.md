@@ -55,7 +55,7 @@ Every voice has **exactly the same** per-note values.
 
 | Value | Meaning everywhere | KICK | HAT | PERC | BASS / CHORD / MELODY |
 |---|---|---|---|---|---|
-| *Pitch* (per step) | the sound's frequency, ±12 st | sine pitch (base 50 Hz) | noise HP frequency (base 8 kHz) | ring + click frequency (base 1.4 kHz) | note (relative to Root). BASS F1, CHORD F2 (minor 7th), MELODY F3 |
+| *Pitch* (per step) | the sound's frequency, ±12 st | sine pitch (base 50 Hz) | noise HP frequency (base 8 kHz) | ring + click frequency (base 1.4 kHz) | note (relative to Root). BASS F1, CHORD = chord root (octave doesn't matter, see Type), MELODY F3 |
 | **LP** | lowpass on the voice (brightness) | 4-pole ladder after drive | 2× one-pole LP | 4-pole ladder | ladder cutoff (+ envelope) |
 | **Res** | resonance of the voice's filter | ladder res (boom) | HP resonance (ring) | BP Q (ringy ↔ noisy) | ladder res |
 | **HP** | highpass, 12 dB. Position 0 = off (bypassed) | 30 Hz–1 kHz | 3–16 kHz | 200 Hz–8 kHz | bass 30 Hz–2 kHz, chord 60 Hz–4 kHz |
@@ -63,7 +63,7 @@ Every voice has **exactly the same** per-note values.
 | **Dist** | saturation, loudness-matched | ✓ | ✓ | ✓ | ✓ |
 | Phs · Lvl · **Pan** · Dly · Rev | mixer; Pan defaults to centre, equal-power, sends stay centred (pre-pan) | ✓ | ✓ | ✓ | ✓ |
 
-Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Pan, Dly, Rev, identical on every track.
+Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Pan, Dly, Rev, identical on every track. CHORD has one extra row on top: **Type**.
 Copying notes between tracks carries every value by its knob position.
 
 ### Effects (global)
@@ -156,7 +156,8 @@ Saturation everywhere is `tanh`. Use 2× oversampling only in the synth filter a
 **SYNTH** (BASS = 1 note, CHORD = 4 notes)
 - Oscillators: saw only (PolyBLEP). No waveform choice.
 - **Analog drift (baked in):** each oscillator gets a slow random pitch wander of ±4 cents. CHORD voices are detuned ±6 cents from each other.
-- CHORD notes: root+0, +3, +7, +10 (minor 7), one octave above BASS.
+- CHORD **Type** (per note, 9 positions, dark → bright): oct, 5th, m, **m7** (default), m9, sus4, M, M7, 7. Always 4 oscillators (oct/5th/triads double tones an octave up; m9 drops the 5th).
+- CHORD **voicing is automatic, around one fixed centre**: every chord tone lands in the window −1…+10 st around F2 (+ Root). So a chord always sounds the same wherever it's pasted, progressions move as few notes as possible, and nothing drifts. Pitch only picks the root; ±12 gives the same voicing. Root position m7 on pitch 0 = the old fixed stab. No key compensation on CHORD (it stays in one register). Slide glides each oscillator to its new note.
 - One **4-pole ladder filter** (tanh stages), `Cutoff` 40 Hz–12 kHz (exp), `Res` 0–0.95 (self-oscillation just short of max).
 - One envelope (fast 2 ms attack, exp decay `Decay` 30 ms–2 s) drives both amp and filter.
   - Filter env amount is fixed at +3 octaves.

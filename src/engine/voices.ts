@@ -120,7 +120,11 @@ export class Perc implements Voice {
 const HOLD_LEVEL = 0.3;
 const DB_PER_OCTAVE = -2; // higher notes sound louder (esp. on small speakers), so tilt them down
 
-/** Mono saw synth. One oscillator for BASS and MELODY, four (minor 7th) for CHORD. Analog drift is baked in. */
+/**
+ * Mono saw synth. One oscillator for BASS and MELODY, four for CHORD. Analog drift is baked in.
+ * CHORD voicing: each tone lands in the octave window just around the base note (-1…+10 st), whatever the root,
+ * so moving between chords changes as few notes as possible.
+ */
 export class Synth implements Voice {
   private ph: Float64Array;
   private dt: Float64Array;
@@ -137,6 +141,9 @@ export class Synth implements Voice {
   private envAmt = 3; // filter envelope depth, octaves
   private note = 0; // current pitch in semitones (float while gliding)
   private target = 0;
+  private cur: Float64Array; // per-oscillator offset from the base note (float while gliding)
+  private tgt: Float64Array;
+  private type = 0;
   private gliding = false;
   private glideA: number; // per-block glide coefficient (~60 ms, like a 303)
   private hold = false; // slide: sustain the envelope into the next step
@@ -148,10 +155,12 @@ export class Synth implements Voice {
   constructor(
     private sr: number,
     private baseMidi: number,
-    private intervals: number[],
     private detune: number[], // cents per oscillator
+    private chords: number[][] | null = null, // per type: one interval per oscillator
   ) {
-    const n = intervals.length;
+    const n = detune.length;
+    this.cur = new Float64Array(n);
+    this.tgt = new Float64Array(n);
     this.ph = new Float64Array(n).map(() => Math.random());
     this.dt = new Float64Array(n);
     this.drift = new Float64Array(n);
@@ -162,7 +171,8 @@ export class Synth implements Voice {
   }
 
   /** Called once per block. */
-  set(cutoff: number, res: number, decay: number, root: number) {
+  set(cutoff: number, res: number, decay: number, root: number, type = 0) {
+    this.type = type;
     this.cutoff = cutoff;
     this.res = res;
     this.dec = decayCoef(decay, this.sr);
@@ -170,17 +180,36 @@ export class Synth implements Voice {
     if (++this.blockCount % 64 === 0) {
       for (let i = 0; i < this.drift.length; i++) this.driftTarget[i] = this.noise.next() * 4;
     }
-    if (this.gliding) this.note += (this.target - this.note) * this.glideA;
-    this.keyGain = Math.pow(10, (DB_PER_OCTAVE * this.note) / 12 / 20);
-    const midi = this.baseMidi + root + this.note;
+    if (this.gliding) {
+      this.note += (this.target - this.note) * this.glideA;
+      for (let i = 0; i < this.cur.length; i++) this.cur[i] += (this.tgt[i] - this.cur[i]) * this.glideA;
+    }
+    // chords stay in one register, so only mono notes need it
+    this.keyGain = this.chords ? 1 : Math.pow(10, (DB_PER_OCTAVE * this.note) / 12 / 20);
+    const midi = this.baseMidi + root;
     for (let i = 0; i < this.dt.length; i++) {
       this.drift[i] += (this.driftTarget[i] - this.drift[i]) * 0.02;
       const cents = this.detune[i] + this.drift[i];
-      this.dt[i] = (mtof(midi + this.intervals[i]) * Math.pow(2, cents / 1200)) / this.sr;
+      this.dt[i] = (mtof(midi + this.cur[i]) * Math.pow(2, cents / 1200)) / this.sr;
+    }
+  }
+
+  /** Oscillator offsets for a note: the note itself (mono) or the chord voiced around the base note. */
+  private voice(note: number) {
+    if (!this.chords) {
+      this.tgt.fill(note);
+      return;
+    }
+    const iv = this.chords[this.type];
+    for (let i = 0; i < iv.length; i++) {
+      const pc = (((note + iv[i]) % 12) + 12) % 12;
+      this.tgt[i] = (pc === 11 ? -1 : pc) + 12 * Math.floor(iv[i] / 12);
     }
   }
 
   trigger(note: number) {
+    this.voice(note);
+    this.cur.set(this.tgt);
     this.note = this.target = note;
     this.gliding = false;
     this.attacking = true;
@@ -188,6 +217,7 @@ export class Synth implements Voice {
 
   /** Slide into a note: glide the pitch, don't retrigger the envelope. */
   glide(note: number) {
+    this.voice(note);
     this.target = note;
     this.gliding = true;
   }
