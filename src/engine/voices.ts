@@ -16,29 +16,52 @@ export class Kick implements Voice {
   private amp = 0;
   private pEnv = 0;
   private dec = 0;
-  private pDec: number;
+  private pDec = 0;
+  private depth = 3; // pitch starts at (1 + depth) × the base
   private tune = 50; // fixed base pitch; per-step pitch moves it
   private ratio = 1;
+  private punch = 0.5;
+  private click = 0;
+  private cEnv = 0; // beater click envelope
+  private cLevel = 0;
+  private cPh = 0;
+  private cDec: number;
+  private noise = new Noise(777);
   constructor(private sr: number) {
-    this.pDec = Math.exp(-1 / (0.03 * sr));
+    this.cDec = Math.exp(-1 / (0.0015 * sr));
   }
-  set(tone: number, res: number, decay: number) {
+  set(tone: number, res: number, decay: number, punch: number, click: number) {
     this.tone = tone;
     this.res = res;
     this.dec = decayCoef(decay, this.sr);
+    this.punch = punch;
+    this.click = click;
   }
   trigger(note: number) {
     this.ratio = ratio(note);
     this.ph = 0;
     this.amp = 1;
     this.pEnv = 1;
+    // Punch: deeper and faster pitch drop together. 0.5 = the classic 4× → 1× over 30 ms.
+    const p = this.punch;
+    this.depth = 12 * p * p;
+    this.pDec = Math.exp(-1 / (0.03 * Math.sqrt(0.5 / Math.max(p, 0.05)) * this.sr));
+    this.cEnv = 1;
+    this.cPh = 0;
+    this.cLevel = 0.9 * this.click;
   }
   process() {
     if (this.amp < 1e-5) return 0;
     this.pEnv *= this.pDec;
-    this.ph += (this.tune * this.ratio * (1 + 3 * this.pEnv)) / this.sr;
+    this.ph += (this.tune * this.ratio * (1 + this.depth * this.pEnv)) / this.sr;
     if (this.ph >= 1) this.ph -= 1;
-    const x = Math.sin(TAU * this.ph) * this.amp;
+    let x = Math.sin(TAU * this.ph) * this.amp;
+    if (this.cEnv > 1e-4) {
+      // a 1–3 ms tick: noise plus a 2.5 kHz blip
+      this.cPh += 2500 / this.sr;
+      x += (this.noise.next() * 0.6 + Math.sin(TAU * this.cPh) * 0.4) * this.cEnv * this.cLevel;
+      this.cEnv *= this.cDec;
+    }
     this.amp *= this.dec;
     return this.filter.process(tanh(x * 1.5), this.tone, this.res, this.sr) * 0.9;
   }

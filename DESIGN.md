@@ -63,7 +63,7 @@ Every voice has **exactly the same** per-note values.
 | **Dist** | saturation, loudness-matched | ✓ | ✓ | ✓ | ✓ |
 | Phs · Lvl · **Pan** · Dly · Rev | mixer; Pan defaults to centre, equal-power, sends stay centred (pre-pan) | ✓ | ✓ | ✓ | ✓ |
 
-Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Pan, Dly, Rev, identical on every track. CHORD has one extra row on top: **Size**.
+Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Pan, Dly, Rev, identical on every track. CHORD has one extra row on top: **Size**. KICK has two: **Punch** (pitch drop at the hit: depth and speed together, 0 = flat sub sine, 4 = default 4×→1× over 30 ms, 8 = hard knock from 13×) and **Click** (1–3 ms beater tick, noise + 2.5 kHz blip through the kick's LP; default 0).
 Copying notes between tracks carries every value by its knob position.
 
 ### Effects (global)
