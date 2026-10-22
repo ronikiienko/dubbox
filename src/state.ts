@@ -99,8 +99,8 @@ interface V1Track {
 /** Accept v2 files and v1 loops (tiled across the whole song). Unknown fields are dropped. */
 function deserialize(raw: { params?: Record<string, number>; tracks?: unknown[] }): Project {
   const p = emptyProject();
-  // synth Cutoff was renamed Tone (every voice now shares Tone/Res/Decay)
-  const rename = (id: string) => id.replace(/^(bass|chord)\.cutoff$/, '$1.tone');
+  // the voice lowpass was called Cutoff (synths), then Tone; now LP
+  const rename = (id: string) => id.replace(/^(kick|hat|perc|bass|chord)\.(cutoff|tone)$/, '$1.lp');
   for (const [id, v] of Object.entries(raw.params ?? {})) p.params[rename(id)] = v;
   // knobs are stepped: snap values saved before that (or hand-edited) onto a detent
   for (const id in p.params) {

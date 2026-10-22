@@ -77,12 +77,12 @@ export interface TrackDef {
 }
 
 export const TRACKS: TrackDef[] = [
-  // Every voice has the same core: Tone (lowpass brightness), Res, HP (highpass, off by default), Decay.
-  { name: 'KICK', voice: ['kick.tone', 'kick.res', 'kick.hp', 'kick.decay'] },
-  { name: 'HAT', voice: ['hat.tone', 'hat.res', 'hat.hp', 'hat.decay'] },
-  { name: 'PERC', voice: ['perc.tone', 'perc.res', 'perc.hp', 'perc.decay'] },
-  { name: 'BASS', slide: true, voice: ['bass.tone', 'bass.res', 'bass.hp', 'bass.decay'] },
-  { name: 'CHORD', slide: true, voice: ['chord.tone', 'chord.res', 'chord.hp', 'chord.decay'] },
+  // Every voice has the same core: LP (lowpass), Res, HP (highpass, off by default), Decay.
+  { name: 'KICK', voice: ['kick.lp', 'kick.res', 'kick.hp', 'kick.decay'] },
+  { name: 'HAT', voice: ['hat.lp', 'hat.res', 'hat.hp', 'hat.decay'] },
+  { name: 'PERC', voice: ['perc.lp', 'perc.res', 'perc.hp', 'perc.decay'] },
+  { name: 'BASS', slide: true, voice: ['bass.lp', 'bass.res', 'bass.hp', 'bass.decay'] },
+  { name: 'CHORD', slide: true, voice: ['chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
 ];
 
 export const mixId = (i: number, k: 'dst' | 'phs' | 'lvl' | 'dly' | 'rev') => `mix.${i}.${k}`;
@@ -99,15 +99,15 @@ export const SWING = [50, 54, 58, 62, 66, 75];
 export const HP_OFF = 18;
 
 /** The shared core every voice has. */
-const core = (k: string, tone: [number, number, number], res: number, decay: [number, number, number]) => [
-  p({ id: `${k}.tone`, label: 'Tone', min: tone[0], max: tone[1], def: tone[2], curve: 'exp', fmt: hz }),
+const core = (k: string, lp: [number, number, number], res: number, decay: [number, number, number]) => [
+  p({ id: `${k}.lp`, label: 'LP', min: lp[0], max: lp[1], def: lp[2], curve: 'exp', fmt: hz }),
   p({ id: `${k}.res`, label: 'Res', min: 0, max: 0.95, def: res, curve: 'lin' }),
   // position 0 = off (bypassed); 1..8 = ~30 Hz … 2 kHz
   p({ id: `${k}.hp`, label: 'HP', min: HP_OFF, max: 2000, def: HP_OFF, curve: 'exp', fmt: (v) => (v <= HP_OFF * 1.01 ? 'off' : hz(v)) }),
   p({ id: `${k}.decay`, label: 'Decay', min: decay[0], max: decay[1], def: decay[2], curve: 'exp', fmt: sec }),
 ];
 
-const synthParams = (k: string, tone: number, decay: number) => core(k, [40, 12000, tone], 0.25, [0.03, 2, decay]);
+const synthParams = (k: string, lp: number, decay: number) => core(k, [40, 12000, lp], 0.25, [0.03, 2, decay]);
 
 export const PARAMS: ParamDef[] = [
   // global

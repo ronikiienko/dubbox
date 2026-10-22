@@ -56,14 +56,14 @@ Every voice has **exactly the same** per-note values.
 | Value | Meaning everywhere | KICK | HAT | PERC | BASS / CHORD |
 |---|---|---|---|---|---|
 | *Pitch* (per step) | the sound's frequency, ±12 st | sine pitch (base 50 Hz) | noise HP frequency (base 8 kHz) | ring + click frequency (base 1.4 kHz) | note (relative to Root) |
-| **Tone** | brightness: lowpass on the voice | 4-pole ladder after drive | 2× one-pole LP | 4-pole ladder | ladder cutoff (+ envelope) |
+| **LP** | lowpass on the voice (brightness) | 4-pole ladder after drive | 2× one-pole LP | 4-pole ladder | ladder cutoff (+ envelope) |
 | **Res** | resonance of the voice's filter | ladder res (boom) | HP resonance (ring) | BP Q (ringy ↔ noisy) | ladder res |
 | **HP** | highpass, 12 dB. Position 0 = off (bypassed), 1–8 = ~30 Hz … 2 kHz | ✓ | ✓ | ✓ | ✓ |
 | **Decay** | length | ✓ | ✓ | ✓ | ✓ |
 | **Dist** | saturation, loudness-matched | ✓ | ✓ | ✓ | ✓ |
 | Phs · Lvl · Dly · Rev | mixer | ✓ | ✓ | ✓ | ✓ |
 
-Row order is Tone, Res, HP, Decay, Dist, Phs, Lvl, Dly, Rev, identical on every track.
+Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Dly, Rev, identical on every track.
 Copying notes between tracks carries every value by its knob position.
 
 ### Effects (global)
@@ -87,7 +87,7 @@ Knobs: 5 FX + 4 global = **9**. Everything else is per note.
 - The whole track is one timeline: **300 bars × 16 steps = 4800 steps per track** (10 min at 120 bpm). It's fixed for now (`SONG_BARS` in `state.ts`).
 - No loops, patterns or per-track lengths. Playback runs from the start marker to the end, then loops to bar 1.
 - Grid resolution is 16th steps only. Nothing can be placed off the grid; swing is the only timing offset.
-- Steps are on/off (click toggles). No accents or velocity: emphasis comes from per-note values (Lvl, Tone, Dist…).
+- Steps are on/off (click toggles). No accents or velocity: emphasis comes from per-note values (Lvl, LP, Dist…).
 - **Drag sideways** from a step = paint the clicked step's new state across every step you pass.
 - **Every step has a pitch**: drag a step vertically, or wheel over an active step → semitone offset −12..+12. Shown as a small number. Synths: relative to Root. Drums: shifts the voice (KICK pitch, HAT/PERC tone) by that many semitones.
 - **Slide** (BASS, CHORD): **Alt-click** a step to toggle it, drawn as a tie into the next step. Like a 303: the slid note's volume decays to a 30% sustain level and holds there until the next step. The filter envelope keeps decaying as normal, so slid notes aren't louder or brighter. If that step is on, the pitch glides into it (~60 ms) without retriggering the envelope. If it's off, the note just ends there.
@@ -138,15 +138,15 @@ Saturation everywhere is `tanh`. Use 2× oversampling only in the synth filter a
 **KICK**
 - Sine oscillator. Pitch env: starts at `tune × 4`, exponential decay to `tune` with τ ≈ 30 ms.
 - Amp env: exponential decay, `Decay` → 0.1–1.2 s.
-- `tanh(x × 1.5)` drive → 4-pole ladder lowpass at `Tone` (150 Hz–12 kHz), with `Res`.
+- `tanh(x × 1.5)` drive → 4-pole ladder lowpass at `LP` (150 Hz–12 kHz), with `Res`.
 - Base pitch fixed at 50 Hz; per-step pitch ±12 st → ~25–100 Hz.
 
 **HAT**
-- White noise → 2-pole highpass at 8 kHz × pitch, Q 0.7 + 8 × `Res` → 2× one-pole lowpass at `Tone` (2–16 kHz).
+- White noise → 2-pole highpass at 8 kHz × pitch, Q 0.7 + 8 × `Res` → 2× one-pole lowpass at `LP` (2–16 kHz).
 - Decay 15–600 ms (low = closed, high = open).
 
 **PERC**
-- Noise → bandpass at 1.4 kHz × pitch, Q 1 + 12 × `Res`, plus a 2 ms sine click at half that → 4-pole ladder lowpass at `Tone` (0.5–12 kHz).
+- Noise → bandpass at 1.4 kHz × pitch, Q 1 + 12 × `Res`, plus a 2 ms sine click at half that → 4-pole ladder lowpass at `LP` (0.5–12 kHz).
 - Decay 20–400 ms.
 
 **SYNTH** (BASS = 1 note, CHORD = 4 notes)
