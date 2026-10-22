@@ -58,9 +58,9 @@ class Engine extends AudioWorkletProcessor {
   private phasers = TRACKS.map(() => new Phaser(this.sr));
   private lvlT = new Float64Array(N);
   private dckT = new Float64Array(N); // Duck depth per track (0..1)
-  private duck = 0; // pump envelope: jumps to 1 on every audible kick, falls back within a beat
-  private duckAtk = false;
-  private duckA = timeCoef(0.002, sampleRate);
+  private duck = 0; // pump envelope: 1 = fully ducked
+  private duckN = -1; // samples since the last audible kick, -1 = idle
+  private duckFrom = 0; // envelope value when that kick hit (a new kick crossfades from it, no jump)
   private dlyT = new Float64Array(N);
   private revT = new Float64Array(N);
   private panT = new Float64Array(N);
@@ -191,7 +191,7 @@ class Engine extends AudioWorkletProcessor {
     }
 
     this.lvlT[t] = audible(this.tracks, t) ? lvlGain(R[mixId(t, 'lvl')]) : 0;
-    this.dckT[t] = t === 0 ? 0 : R[mixId(t, 'dck')];
+    this.dckT[t] = t === 0 ? 0 : Math.sqrt(R[mixId(t, 'dck')]);
     this.dlyT[t] = this.throws[t] ? 1 : R[mixId(t, 'dly')];
     this.revT[t] = R[mixId(t, 'rev')];
     this.panT[t] = R[mixId(t, 'pan')];
@@ -254,7 +254,11 @@ class Engine extends AudioWorkletProcessor {
         v.setHold(!!s && !!tr.slide[k]);
       } else if (s) {
         v.trigger(tr.note[k]);
-        if (t === 0) this.duckAtk = true; // kick → pump everything with Duck
+        if (t === 0) {
+          // kick → pump everything with Duck
+          this.duckN = 0;
+          this.duckFrom = this.duck;
+        }
       }
     }
   }
@@ -280,8 +284,7 @@ class Engine extends AudioWorkletProcessor {
     const inc = R.tempo / 60 / this.sr * 4;
     const swing = (SWING[R.swing] - 50) / 50;
     const vol = R.volume;
-    // pump release: back to ~1% within a quarter note, whatever the tempo
-    const duckRel = Math.exp(-1 / (0.22 * (60 / R.tempo) * this.sr));
+    const beat = (60 / R.tempo) * this.sr; // samples
     const vals = this.vals;
 
     for (let s = 0; s < frames; s++) {
@@ -297,16 +300,20 @@ class Engine extends AudioWorkletProcessor {
       }
 
       for (let t = 0; t < N; t++) vals[t] = this.voices[t].process();
-      if (this.duckAtk) {
-        this.duck += (1 - this.duck) * this.duckA; // 2 ms attack, no click
-        if (this.duck > 0.99) this.duckAtk = false;
-      } else this.duck *= duckRel;
+      if (this.duckN >= 0) {
+        // the classic pump: 3 ms down, held 30 ms, then a slow-then-fast swell back over 2/3 of a beat
+        const n = this.duckN++;
+        const atk = Math.min(1, n / (0.003 * this.sr));
+        const u = Math.min(1, Math.max(0, (n - 0.03 * this.sr) / (0.65 * beat)));
+        this.duck = Math.max((1 - u * u) * atk, this.duckFrom * (1 - atk));
+        if (u >= 1) this.duckN = -1;
+      }
 
       // per track: highpass → dist → phaser → fader → post-fader sends
       let dryL = 0, dryR = 0, dIn = 0, rIn = 0;
       for (let t = 0; t < N; t++) {
-        // Duck: up to −20 dB at the kick, swelling back
-        const g = this.lvl[t].next(this.lvlT[t]) * (1 - 0.9 * this.dckT[t] * this.duck);
+        // Duck: depth √Duck (middle ≈ −11 dB, top = silent at the hit)
+        const g = this.lvl[t].next(this.lvlT[t]) * (1 - this.dckT[t] * this.duck);
         let x = vals[t];
         if (this.hpOn[t]) {
           this.hps[t].run(x);

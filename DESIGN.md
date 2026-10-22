@@ -117,7 +117,7 @@ There are **no knobs**. Everything is per note, and the song-wide values are row
 Values with a neutral "normal" default sit at the **middle position** (4 of 0–8), so every note can go either way: **Decay** (range centred on the default), **Lvl** (in dB: off, −18, −12, −6, **0**, +3, +6, +9, +12), **Pan** (centre), **LP on BASS/CHORD** (±3 octaves). Values whose natural default is "off" or "open" stay at the edge: HP, Dist, Phs, Dly, Rev, Res, drum LP (fully open).
 
 ### 3.6 Duck (sidechain pump)
-Every track but KICK has **Duck** (per note, 0 = off). Each audible KICK note starts a pump envelope (2 ms attack, release back to ~1% within a quarter note at any tempo); a track's fader is multiplied by `1 − 0.9 × Duck × env` (top = −20 dB at the hit). Sends are post-fader, so echoes and room pump too. Muting KICK stops the pump.
+Every track but KICK has **Duck** (per note, 0 = off). Each audible KICK note starts the classic pump shape: down in 3 ms, held 30 ms, then a slow-then-fast swell (1 − u²) back to full over ⅔ of a beat, at any tempo; a new kick crossfades from wherever the envelope is. A track's fader is multiplied by `1 − √Duck × env` (middle ≈ −11 dB, top = silent at the hit). Sends are post-fader, so what feeds the delay/reverb pumps; their returns don't. Muting KICK stops the pump.
 
 ### 3.5 GLOBAL lane
 The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swing, Vol, Delay Time / Fbk / Tone, Reverb Size, Tape Age**.
