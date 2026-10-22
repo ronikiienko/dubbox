@@ -1,7 +1,7 @@
 // The whole engine: clock, sequencer, voices, mixer, FX, master.
 // Runs on the audio thread. Talks to the UI only through `port` (see bridge.ts).
 
-import { CHORDS, PARAMS, PARAM_BY_ID, SWING, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
+import { DEFAULT_SCALE, PARAMS, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
 import { NO_LOCK, audible, type TrackState } from '../state';
 import type { FromEngine, ToEngine } from './bridge';
 import { SVF, Smooth, timeCoef } from './dsp';
@@ -15,6 +15,7 @@ declare class AudioWorkletProcessor {
 }
 
 const N = TRACKS.length;
+const CHORD = TRACKS.findIndex((t) => t.name === 'CHORD');
 const DELAY_SIXTEENTHS = [1, 2, 3, 4, 6];
 const REC_CHUNK = 8192;
 
@@ -44,7 +45,7 @@ class Engine extends AudioWorkletProcessor {
   private hat = new Hat(this.sr);
   private perc = new Perc(this.sr);
   private bass = new Synth(this.sr, 29, [0]);
-  private chord = new Synth(this.sr, 41, [-6, 2, -2, 6], CHORDS.map((c) => c[1]));
+  private chord = new Synth(this.sr, 41, [-6, 2, -2, 6], true);
   private mel = new Synth(this.sr, 53, [0]); // same mono saw as BASS, two octaves up
   private voices: Voice[] = [this.kick, this.hat, this.perc, this.bass, this.chord, this.mel];
   private vals = new Float64Array(N);
@@ -177,9 +178,22 @@ class Engine extends AudioWorkletProcessor {
       case 1: this.hat.set(R['hat.lp'], R['hat.res'], R['hat.decay']); break;
       case 2: this.perc.set(R['perc.lp'], R['perc.res'], R['perc.decay']); break;
       case 3: this.bass.set(R['bass.lp'], R['bass.res'], R['bass.decay'], R.root); break;
-      case 4: this.chord.set(R['chord.lp'], R['chord.res'], R['chord.decay'], R.root, R['chord.type']); break;
+      case 4: this.chord.set(R['chord.lp'], R['chord.res'], R['chord.decay'], R.root); break;
       case 5: this.mel.set(R['mel.lp'], R['mel.res'], R['mel.decay'], R.root); break;
     }
+  }
+
+  private iv = new Float64Array(4);
+
+  /** The scale at step k: set by the latest CHORD note, minor if there is none yet. */
+  private scaleAt(k: number): number {
+    const tr = this.tracks[CHORD];
+    for (let j = k; j >= 0; j--) {
+      if (!tr.s[j]) continue;
+      const v = tr.locks['chord.scale'][j];
+      return v === NO_LOCK ? DEFAULT_SCALE : v;
+    }
+    return DEFAULT_SCALE;
   }
 
   private triggerStep(k: number) {
@@ -198,10 +212,18 @@ class Engine extends AudioWorkletProcessor {
         continue;
       }
       if (v instanceof Synth) {
+        // synth pitch = scale step in the current scale; CHORD also stacks its chord from there
+        let semi = 0;
+        const iv = v === this.chord ? this.iv : undefined;
+        if (s) {
+          const scale = this.scaleAt(k);
+          semi = stepToSemi(scale, tr.note[k]);
+          if (iv) chordIntervals(scale, this.R['chord.size'], tr.note[k], iv);
+        }
         // 303 slide: a slid step holds its note and glides into this one instead of retriggering
         const slidIn = k > 0 && tr.s[k - 1] && tr.slide[k - 1];
-        if (s && slidIn) v.glide(tr.note[k]);
-        else if (s) v.trigger(tr.note[k]);
+        if (s && slidIn) v.glide(semi, iv);
+        else if (s) v.trigger(semi, iv);
         v.setHold(!!s && !!tr.slide[k]);
       } else if (s) {
         v.trigger(tr.note[k]);

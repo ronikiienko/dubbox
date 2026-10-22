@@ -55,7 +55,7 @@ Every voice has **exactly the same** per-note values.
 
 | Value | Meaning everywhere | KICK | HAT | PERC | BASS / CHORD / MELODY |
 |---|---|---|---|---|---|
-| *Pitch* (per step) | the sound's frequency, ±12 st | sine pitch (base 50 Hz) | noise HP frequency (base 8 kHz) | ring + click frequency (base 1.4 kHz) | note (relative to Root). BASS F1, CHORD = chord root (octave doesn't matter, see Type), MELODY F3 |
+| *Pitch* (per step) | drums: ±12 st; synths: ±7 scale steps | sine pitch (base 50 Hz) | noise HP frequency (base 8 kHz) | ring + click frequency (base 1.4 kHz) | scale step from Root in the current Scale. BASS F1, CHORD = chord root (octave doesn't matter), MELODY F3 |
 | **LP** | lowpass on the voice (brightness) | 4-pole ladder after drive | 2× one-pole LP | 4-pole ladder | ladder cutoff (+ envelope) |
 | **Res** | resonance of the voice's filter | ladder res (boom) | HP resonance (ring) | BP Q (ringy ↔ noisy) | ladder res |
 | **HP** | highpass, 12 dB. Position 0 = off (bypassed) | 30 Hz–1 kHz | 3–16 kHz | 200 Hz–8 kHz | bass 30 Hz–2 kHz, chord 60 Hz–4 kHz |
@@ -63,7 +63,7 @@ Every voice has **exactly the same** per-note values.
 | **Dist** | saturation, loudness-matched | ✓ | ✓ | ✓ | ✓ |
 | Phs · Lvl · **Pan** · Dly · Rev | mixer; Pan defaults to centre, equal-power, sends stay centred (pre-pan) | ✓ | ✓ | ✓ | ✓ |
 
-Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Pan, Dly, Rev, identical on every track. CHORD has one extra row on top: **Type**.
+Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Pan, Dly, Rev, identical on every track. CHORD has two extra rows on top: **Scale** and **Size**.
 Copying notes between tracks carries every value by its knob position.
 
 ### Effects (global)
@@ -89,7 +89,7 @@ Knobs: 5 FX + 4 global = **9**. Everything else is per note.
 - Grid resolution is 16th steps only. Nothing can be placed off the grid; swing is the only timing offset.
 - Steps are on/off (click toggles). No accents or velocity: emphasis comes from per-note values (Lvl, LP, Dist…).
 - **Drag sideways** from a step = paint the clicked step's new state across every step you pass.
-- **Every step has a pitch**: drag a step vertically, or wheel over an active step → semitone offset −12..+12. Shown as a small number. Synths: relative to Root. Drums: shifts the voice (KICK pitch, HAT/PERC tone) by that many semitones.
+- **Every step has a pitch**: drag a step vertically, or wheel over an active step Shown as a small number. **Synths (BASS, CHORD, MELODY): scale steps, −7..+7** (7 per octave, in the current Scale, from Root): wrong notes are impossible; chromatic colour comes from switching Scale. **Drums: semitones, −12..+12**, shifting the voice (KICK pitch, HAT/PERC tone). Paste clamps to the target's range. Files before v3 had synth semitones; they're moved to the nearest minor-scale step.
 - **Slide** (BASS, CHORD): **Alt-click** a step to toggle it, drawn as a tie into the next step. Like a 303: the slid note's volume decays to a 30% sustain level and holds there until the next step. The filter envelope keeps decaying as normal, so slid notes aren't louder or brighter. If that step is on, the pitch glides into it (~60 ms) without retriggering the envelope. If it's off, the note just ends there.
 - **Swing** 50 / 54 / 58 / 62 / 66 / 75 %, delays every odd 16th by `(swing − 50) / 50` of a step.
 - Clock lives in the worklet: `samplesPerStep = sr × 60 / bpm / 4`. Sample-accurate triggers.
@@ -156,13 +156,14 @@ Saturation everywhere is `tanh`. Use 2× oversampling only in the synth filter a
 **SYNTH** (BASS = 1 note, CHORD = 4 notes)
 - Oscillators: saw only (PolyBLEP). No waveform choice.
 - **Analog drift (baked in):** each oscillator gets a slow random pitch wander of ±4 cents. CHORD voices are detuned ±6 cents from each other.
-- CHORD **Type** (per note, 9 positions, dark → bright): oct, 5th, m, **m7** (default), m9, sus4, M, M7, 7. Always 4 oscillators (oct/5th/triads double tones an octave up; m9 drops the 5th).
-- CHORD **voicing is automatic, around one fixed centre**: every chord tone lands in the window −1…+10 st around F2 (+ Root). So a chord always sounds the same wherever it's pasted, progressions move as few notes as possible, and nothing drifts. Pitch only picks the root; ±12 gives the same voicing. Root position m7 on pitch 0 = the old fixed stab. No key compensation on CHORD (it stays in one register). Slide glides each oscillator to its new note.
+- **Scale** (CHORD row, per note, holds until the next CHORD note): the 7 modes on Root, dark → bright, each step changes one note: Loc, Phr, **Min** (default), Dor, Mix, Maj, Lyd. Together they reach all 12 notes. **It is the scale of the whole song at that moment**: BASS and MELODY pitches are read in it too (a muted CHORD still sets it; before the first CHORD note it's Min). Borrowing = switch Scale on one chord.
+- **Size** (CHORD row, per note): oct, 5th, tri, **7th** (default), 9th. Stacked thirds from the scale, starting on the note's step, so major/minor/diminished fall out of the scale. **5th is always a perfect fifth** (power chord); tri and up follow the scale strictly, so e.g. step 1 in minor is diminished. Always 4 oscillators: oct/5th/tri double tones an octave up; 9th drops the 5th.
+- CHORD **voicing is automatic, around one fixed centre**: every chord tone lands in the window −1…+10 st around F2 (+ Root). So a chord always sounds the same wherever it's pasted, progressions move as few notes as possible, and nothing drifts. Pitch only picks the root step; ±7 gives the same voicing. Step 0 in Min with Size 7th = the old fixed m7 stab. No key compensation on CHORD (it stays in one register). Slide glides each oscillator to its new note.
 - One **4-pole ladder filter** (tanh stages), `Cutoff` 40 Hz–12 kHz (exp), `Res` 0–0.95 (self-oscillation just short of max).
 - One envelope (fast 2 ms attack, exp decay `Decay` 30 ms–2 s) drives both amp and filter.
   - Filter env amount is fixed at +3 octaves.
 - Mono retrigger; glide only via slide.
-- Pitch loudness compensation: −2 dB per octave of step pitch above root (follows the glide).
+- Pitch loudness compensation (BASS, MELODY): −2 dB per octave of pitch above root (follows the glide).
 - Root: BASS base note = MIDI 29 + rootIndex (F1 by default), CHORD = +12.
 
 ### 5.2 Tape delay (the important one)

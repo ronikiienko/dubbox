@@ -82,7 +82,7 @@ export const TRACKS: TrackDef[] = [
   { name: 'HAT', voice: ['hat.lp', 'hat.res', 'hat.hp', 'hat.decay'] },
   { name: 'PERC', voice: ['perc.lp', 'perc.res', 'perc.hp', 'perc.decay'] },
   { name: 'BASS', slide: true, voice: ['bass.lp', 'bass.res', 'bass.hp', 'bass.decay'] },
-  { name: 'CHORD', slide: true, voice: ['chord.type', 'chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
+  { name: 'CHORD', slide: true, voice: ['chord.scale', 'chord.size', 'chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
   { name: 'MELODY', slide: true, voice: ['mel.lp', 'mel.res', 'mel.hp', 'mel.decay'] },
 ];
 
@@ -96,22 +96,49 @@ export const lockIds = (i: number) => [
 
 export const SWING = [50, 54, 58, 62, 66, 75];
 
-/** CHORD types, dark → bright: 4 intervals over the root. 12+ = an octave above where that tone lands. */
-export const CHORDS: [string, number[]][] = [
-  ['oct', [0, 12, 0, 12]],
-  ['5th', [0, 7, 0, 12]],
-  ['m', [0, 3, 7, 12]],
-  ['m7', [0, 3, 7, 10]],
-  ['m9', [0, 3, 10, 14]],
-  ['sus4', [0, 5, 7, 12]],
-  ['M', [0, 4, 7, 12]],
-  ['M7', [0, 4, 7, 11]],
-  ['7', [0, 4, 7, 10]],
+/** Modes on Root, dark → bright: each step changes one note. Index 2 (minor) is the default. */
+export const SCALES: [string, number[]][] = [
+  ['Loc', [0, 1, 3, 5, 6, 8, 10]],
+  ['Phr', [0, 1, 3, 5, 7, 8, 10]],
+  ['Min', [0, 2, 3, 5, 7, 8, 10]],
+  ['Dor', [0, 2, 3, 5, 7, 9, 10]],
+  ['Mix', [0, 2, 4, 5, 7, 9, 10]],
+  ['Maj', [0, 2, 4, 5, 7, 9, 11]],
+  ['Lyd', [0, 2, 4, 6, 7, 9, 11]],
 ];
+export const DEFAULT_SCALE = 2;
+export const SIZES = ['oct', '5th', 'tri', '7th', '9th'];
+
+/** Pitch range per track: synths count scale steps (±7 = an octave), drums semitones. */
+export const pitchRange = (i: number) => (TRACKS[i].slide ? 7 : 12);
+
+/** Scale step (any integer, 7 per octave) → semitones above Root. */
+export function stepToSemi(scale: number, step: number): number {
+  const o = Math.floor(step / 7);
+  return SCALES[scale][1][step - 7 * o] + 12 * o;
+}
+
+/**
+ * The chord on scale step `step`: 4 intervals (one per oscillator) in semitones above its root, stacked in
+ * thirds from the scale. 12+ = an octave above where that tone gets voiced. The 5th size is always a perfect
+ * fifth (a power chord); triads and up follow the scale, so some steps are diminished.
+ */
+export function chordIntervals(scale: number, size: number, step: number, out: Float64Array) {
+  const r = stepToSemi(scale, step);
+  const t = (k: number) => stepToSemi(scale, step + k) - r;
+  const iv =
+    size === 0 ? [0, 12, 0, 12] :
+    size === 1 ? [0, 7, 0, 12] :
+    size === 2 ? [0, t(2), t(4), 12] :
+    size === 3 ? [0, t(2), t(4), t(6)] :
+    [0, t(2), t(6), t(8)]; // 9th: no 5th, 4 oscillators
+  out.set(iv);
+}
 
 /** One-line explanations of the per-note values, shown when a value row is expanded. */
 const DESCRIPTIONS: Record<string, string> = {
-  type: 'Chord type. Voiced around one centre, so changes move smoothly.',
+  scale: 'Scale from here on, dark → bright. BASS and MELODY follow it too.',
+  size: 'Chord size: octave, 5th, triad, 7th, 9th. Voiced automatically.',
   lp: 'Lowpass. Lower = darker, softer.',
   res: 'Filter resonance. Higher = ringing, squelchy.',
   hp: 'Highpass. Cuts the low end. 0 = off.',
@@ -170,7 +197,8 @@ export const PARAMS: ParamDef[] = [
   ...core('hat', [2000, 16000, 16000], 0, around(0.06, 8)),
   ...core('perc', [500, 12000, 12000], 0.25, around(0.12, 4)),
   ...synthParams('bass', 220, 0.25),
-  p({ id: 'chord.type', label: 'Type', min: 0, max: 8, def: 3, curve: 'step', steps: CHORDS.map((c) => c[0]) }),
+  p({ id: 'chord.scale', label: 'Scale', min: 0, max: 6, def: DEFAULT_SCALE, curve: 'step', steps: SCALES.map((c) => c[0]) }),
+  p({ id: 'chord.size', label: 'Size', min: 0, max: 4, def: 3, curve: 'step', steps: SIZES }),
   ...synthParams('chord', 600, 0.35),
   ...synthParams('mel', 1500, 0.3),
 

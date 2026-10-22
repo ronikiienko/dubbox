@@ -143,7 +143,6 @@ export class Synth implements Voice {
   private target = 0;
   private cur: Float64Array; // per-oscillator offset from the base note (float while gliding)
   private tgt: Float64Array;
-  private type = 0;
   private gliding = false;
   private glideA: number; // per-block glide coefficient (~60 ms, like a 303)
   private hold = false; // slide: sustain the envelope into the next step
@@ -156,7 +155,7 @@ export class Synth implements Voice {
     private sr: number,
     private baseMidi: number,
     private detune: number[], // cents per oscillator
-    private chords: number[][] | null = null, // per type: one interval per oscillator
+    private chord = false, // CHORD: trigger/glide take intervals, voiced around the base note
   ) {
     const n = detune.length;
     this.cur = new Float64Array(n);
@@ -171,8 +170,7 @@ export class Synth implements Voice {
   }
 
   /** Called once per block. */
-  set(cutoff: number, res: number, decay: number, root: number, type = 0) {
-    this.type = type;
+  set(cutoff: number, res: number, decay: number, root: number) {
     this.cutoff = cutoff;
     this.res = res;
     this.dec = decayCoef(decay, this.sr);
@@ -185,7 +183,7 @@ export class Synth implements Voice {
       for (let i = 0; i < this.cur.length; i++) this.cur[i] += (this.tgt[i] - this.cur[i]) * this.glideA;
     }
     // chords stay in one register, so only mono notes need it
-    this.keyGain = this.chords ? 1 : Math.pow(10, (DB_PER_OCTAVE * this.note) / 12 / 20);
+    this.keyGain = this.chord ? 1 : Math.pow(10, (DB_PER_OCTAVE * this.note) / 12 / 20);
     const midi = this.baseMidi + root;
     for (let i = 0; i < this.dt.length; i++) {
       this.drift[i] += (this.driftTarget[i] - this.drift[i]) * 0.02;
@@ -195,20 +193,19 @@ export class Synth implements Voice {
   }
 
   /** Oscillator offsets for a note: the note itself (mono) or the chord voiced around the base note. */
-  private voice(note: number) {
-    if (!this.chords) {
+  private voice(note: number, iv?: ArrayLike<number>) {
+    if (!this.chord || !iv) {
       this.tgt.fill(note);
       return;
     }
-    const iv = this.chords[this.type];
-    for (let i = 0; i < iv.length; i++) {
+    for (let i = 0; i < this.tgt.length; i++) {
       const pc = (((note + iv[i]) % 12) + 12) % 12;
       this.tgt[i] = (pc === 11 ? -1 : pc) + 12 * Math.floor(iv[i] / 12);
     }
   }
 
-  trigger(note: number) {
-    this.voice(note);
+  trigger(note: number, iv?: ArrayLike<number>) {
+    this.voice(note, iv);
     this.cur.set(this.tgt);
     this.note = this.target = note;
     this.gliding = false;
@@ -216,8 +213,8 @@ export class Synth implements Voice {
   }
 
   /** Slide into a note: glide the pitch, don't retrigger the envelope. */
-  glide(note: number) {
-    this.voice(note);
+  glide(note: number, iv?: ArrayLike<number>) {
+    this.voice(note, iv);
     this.target = note;
     this.gliding = true;
   }

@@ -1,7 +1,7 @@
 // Region edits on the song (copy / cut / paste / duplicate) and undo snapshots.
 // Pure operations on Project; the UI owns selection, keys and engine sync.
 
-import { TRACKS, lockIds } from './params';
+import { TRACKS, lockIds, pitchRange } from './params';
 import { NO_LOCK, SONG_STEPS, type Project, type TrackState } from './state';
 
 /** Tracks t0..t1 (inclusive) × steps s0..s1 (exclusive). */
@@ -68,7 +68,9 @@ export function paste(p: Project, clip: Clip, t0: number, s0: number): Region {
     t1 = ti;
     const tr = p.tracks[ti];
     tr.s.set(ct.s.subarray(0, len), s0);
-    tr.note.set(ct.note.subarray(0, len), s0);
+    // drums count semitones (±12), synths scale steps (±7)
+    const r = pitchRange(ti);
+    for (let i = 0; i < len; i++) tr.note[s0 + i] = Math.max(-r, Math.min(r, ct.note[i]));
     // only synth tracks can slide
     if (TRACKS[ti].slide) tr.slide.set(ct.slide.subarray(0, len), s0);
     else tr.slide.fill(0, s0, s0 + len);

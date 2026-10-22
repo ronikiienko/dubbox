@@ -1,4 +1,4 @@
-import { PARAM_BY_ID, TRACKS, describe, formatParam, fromIndex, lockIds, mixId, snap, toIndex, toReal } from './params';
+import { PARAM_BY_ID, TRACKS, describe, pitchRange, formatParam, fromIndex, lockIds, mixId, snap, toIndex, toReal } from './params';
 import {
   SONG_STEPS, STEPS_PER_BAR,
   type Project, type StepState, NO_LOCK, audible,
@@ -524,7 +524,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
         for (let i = d.last + dir; i !== si + dir; i += dir) setStep(d.ti, i, d.paint, tr.note[i]);
         d.last = si;
       } else if (d.mode === 'note') {
-        const note = clamp(d.note + Math.round((d.y - e.clientY) / 8), -12, 12);
+        const note = clamp(d.note + Math.round((d.y - e.clientY) / 8), -pitchRange(d.ti), pitchRange(d.ti));
         setStep(d.ti, d.si0, (tr.s[d.si0] || 1) as StepState, note);
       }
     });
@@ -572,7 +572,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const tr = ti >= 0 ? p.tracks[ti] : null;
         if (tr && sub < 0 && tr.s[si]) {
           e.preventDefault();
-          setStep(ti, si, tr.s[si] as StepState, clamp(tr.note[si] + (e.deltaY < 0 ? 1 : -1), -12, 12));
+          setStep(ti, si, tr.s[si] as StepState, clamp(tr.note[si] + (e.deltaY < 0 ? 1 : -1), -pitchRange(ti), pitchRange(ti)));
           return;
         }
       }

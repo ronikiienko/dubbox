@@ -1,4 +1,4 @@
-import { PARAMS, PARAM_BY_ID, TRACKS, lockIds, snap, toIndex } from './params';
+import { DEFAULT_SCALE, PARAMS, PARAM_BY_ID, SCALES, TRACKS, lockIds, pitchRange, snap, toIndex } from './params';
 
 export const STEPS_PER_BAR = 16;
 export const SONG_BARS = 300; // 10 min at 120 bpm
@@ -9,7 +9,7 @@ export type StepState = 0 | 1; // off / on
 /** One lane of the song. Dense typed arrays: index = 16th step from song start. */
 export interface TrackState {
   s: Uint8Array; // StepState per step
-  note: Int8Array; // semitones: synths relative to root, drums shift tune/tone
+  note: Int8Array; // synths: scale steps from Root (7 per octave); drums: semitones of tune/tone
   slide: Uint8Array; // 1 = glide into the next step (synths)
   locks: Record<string, Uint8Array>; // per lockable param: detent index per step, NO_LOCK = use the knob
   mute: boolean;
@@ -24,7 +24,7 @@ export function audible(tracks: TrackState[], i: number): boolean {
 export const NO_LOCK = 255;
 
 export interface Project {
-  version: 2;
+  version: 3;
   params: Record<string, number>; // normalized base values
   tracks: TrackState[];
 }
@@ -46,7 +46,7 @@ function emptyTrack(i: number): TrackState {
 
 export function emptyProject(): Project {
   return {
-    version: 2,
+    version: 3,
     params: Object.fromEntries(PARAMS.map((d) => [d.id, d.defN])),
     tracks: TRACKS.map((_, i) => emptyTrack(i)),
   };
@@ -65,14 +65,14 @@ interface SavedTrack {
 }
 
 interface SavedProject {
-  version: 2;
+  version: 3;
   params: Record<string, number>;
   tracks: SavedTrack[];
 }
 
 function serialize(p: Project): SavedProject {
   return {
-    version: 2,
+    version: 3,
     params: p.params,
     tracks: p.tracks.map((tr) => {
       const hits: Hit[] = [];
@@ -97,7 +97,7 @@ interface V1Track {
 }
 
 /** Accept v2 files and v1 loops (tiled across the whole song). Unknown fields are dropped. */
-function deserialize(raw: { params?: Record<string, number>; tracks?: unknown[] }): Project {
+function deserialize(raw: { version?: number; params?: Record<string, number>; tracks?: unknown[] }): Project {
   const p = emptyProject();
   // the voice lowpass was called Cutoff (synths), then Tone; now LP
   const rename = (id: string) => id.replace(/^(kick|hat|perc|bass|chord)\.(cutoff|tone)$/, '$1.lp');
@@ -137,6 +137,23 @@ function deserialize(raw: { params?: Record<string, number>; tracks?: unknown[] 
       tr.mute = !!v1.mute;
     }
   });
+  // Before v3 synth pitch was semitones: move each note to the nearest minor-scale step (lower on a tie).
+  if ((raw.version ?? 1) < 3) {
+    const minor = SCALES[DEFAULT_SCALE][1];
+    p.tracks.forEach((tr, i) => {
+      if (!TRACKS[i].slide) return;
+      const r = pitchRange(i);
+      for (let si = 0; si < SONG_STEPS; si++) {
+        const st = tr.note[si];
+        if (!st) continue;
+        const o = Math.floor(st / 12);
+        const pc = st - 12 * o;
+        let best = 0;
+        for (let d = 1; d < 8; d++) if (Math.abs((d < 7 ? minor[d] : 12) - pc) < Math.abs((best < 7 ? minor[best] : 12) - pc)) best = d;
+        tr.note[si] = Math.max(-r, Math.min(r, 7 * o + best));
+      }
+    });
+  }
   // Track strips have no knobs any more: bake old knob settings into the notes that used them.
   p.tracks.forEach((tr, i) => {
     for (const id of lockIds(i)) {
