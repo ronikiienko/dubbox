@@ -1,4 +1,4 @@
-import { PARAM_BY_ID, TRACKS, formatParam, fromIndex, lockIds, mixId, snap, toIndex, toReal } from './params';
+import { PARAM_BY_ID, TRACKS, describe, formatParam, fromIndex, lockIds, mixId, snap, toIndex, toReal } from './params';
 import {
   SONG_STEPS, STEPS_PER_BAR,
   type Project, type StepState, NO_LOCK, audible,
@@ -38,6 +38,7 @@ const RULER_H = 20;
 const PAD = 9;
 const SUB_H = 22; // per-note bar rows of an expanded track
 const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
+const HOT_DWELL = 150; // ms the mouse must rest on a row before it grows
 const COLORS = {
   bg: '#0d0d0c',
   cell: '#1f1e1b',
@@ -79,7 +80,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let expanded = -1; // track showing its per-note bar rows
   let resizeObs: ResizeObserver | undefined;
   let spacerEl: HTMLElement;
-  let hot: { ti: number; sub: number } | null = null; // bar row under the mouse, drawn tall
+  type RowRef = { ti: number; sub: number } | null;
+  let hot: RowRef = null; // bar row drawn tall (the one the mouse rested on)
+  let cand: RowRef = null; // row under the mouse right now; becomes hot after HOT_DWELL ms
+  let candSince = 0;
+  let gesture = false; // a drag is running: hot row is locked
+  const rowAnim = new Map<string, number>(); // animated row heights
   let subLabels: HTMLElement[][] = [];
 
   // selection, clipboard, undo
@@ -291,7 +297,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   const subRows = (ti: number) => (ti === expanded ? lockIds(ti) : []);
   const isHot = (ti: number, j: number) => !!hot && hot.ti === ti && hot.sub === j;
-  const rowH = (ti: number, j: number) => (isHot(ti, j) ? HOT_H : SUB_H);
+  const rowH = (ti: number, j: number) => rowAnim.get(`${ti}:${j}`) ?? SUB_H;
   const rowPad = (ti: number, j: number) => (isHot(ti, j) ? 13 : 2); // hot rows print values above the bars
   const laneH = (ti: number) => subRows(ti).reduce((y, _, j) => y + rowH(ti, j), ROW_H);
   const laneTop = (ti: number) => {
@@ -317,15 +323,28 @@ export function mountUI(root: HTMLElement, initial: Project) {
     canvas.getContext('2d')!.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  /** Grow the bar row under the mouse (labels follow), shrink the previous one. */
-  function setHot(next: { ti: number; sub: number } | null) {
-    if (hot?.ti === next?.ti && hot?.sub === next?.sub) return;
-    hot = next;
+  const sameRow = (a: RowRef, b: RowRef) => a?.ti === b?.ti && a?.sub === b?.sub;
+
+  /**
+   * Per frame: promote the row the mouse has rested on to hot (after a short dwell, so passing
+   * over rows doesn't make them flap), then ease every row's height toward its target.
+   */
+  function animateRows(now: number, dt: number) {
+    if (!gesture && !sameRow(cand, hot) && now - candSince > HOT_DWELL) hot = cand;
+    const k = 1 - Math.exp(-dt / 0.04); // ~120 ms to settle
+    let changed = false;
     subLabels.forEach((labels, ti) => labels.forEach((el, j) => {
-      el.style.height = el.style.lineHeight = `${rowH(ti, j)}px`;
+      const key = `${ti}:${j}`;
+      const cur = rowAnim.get(key) ?? SUB_H;
+      const target = isHot(ti, j) ? HOT_H : SUB_H;
+      const next = Math.abs(target - cur) < 0.5 ? target : cur + (target - cur) * k;
       el.classList.toggle('hot', isHot(ti, j));
+      if (next === cur) return;
+      rowAnim.set(key, next);
+      el.style.height = `${next}px`;
+      changed = true;
     }));
-    sizeCanvas();
+    if (changed) sizeCanvas();
   }
 
   function setLock(ti: number, id: string, si: number, v: number) {
@@ -420,6 +439,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const { si, ti, sub, rowTop, ruler } = hit(e);
       if (ruler || (e.shiftKey && ti >= 0)) {
         canvas.setPointerCapture(e.pointerId);
+        gesture = true;
         selDrag = { ruler, t0: ti, s0: si, ti, moved: false };
         if (!ruler) updateSel(si, ti);
         return;
@@ -431,6 +451,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       if (sub >= 0) {
         const id = subRows(ti)[sub];
         canvas.setPointerCapture(e.pointerId);
+        gesture = true;
         bars = { ti, sub, id, si0: si, last: si, y: e.clientY, idx0: toIndex(PARAM_BY_ID[id], noteValue(ti, id, si)), rowTop, mode: 'pending' };
         return;
       }
@@ -440,13 +461,18 @@ export function mountUI(root: HTMLElement, initial: Project) {
         return;
       }
       canvas.setPointerCapture(e.pointerId);
+      gesture = true;
       drag = { ti, si0: si, last: si, y: e.clientY, note: tr.note[si], mode: 'pending', paint: (tr.s[si] ? 0 : 1) as StepState };
     });
     canvas.addEventListener('pointermove', (e) => {
       const h0 = hit(e);
       hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
       // the hot row stays locked while a gesture is running, so a stroke never jumps rows
-      if (!bars && !drag && !selDrag) setHot(h0.sub >= 0 ? { ti: h0.ti, sub: h0.sub } : null);
+      const c = h0.sub >= 0 ? { ti: h0.ti, sub: h0.sub } : null;
+      if (!sameRow(c, cand)) {
+        cand = c;
+        candSince = performance.now();
+      }
       if (selDrag) {
         if (h0.si !== selDrag.s0 || h0.ti !== selDrag.t0) selDrag.moved = true;
         if (selDrag.moved || !selDrag.ruler) updateSel(h0.si, h0.ti);
@@ -507,10 +533,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
       drag = null;
       bars = null;
       pending = null;
+      gesture = false;
     };
     canvas.addEventListener('pointerleave', () => {
       hover = null;
-      if (!bars) setHot(null);
+      cand = null;
+      candSince = performance.now();
     });
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
@@ -736,6 +764,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
     knobs = [];
     heads = [];
     subLabels = [];
+    rowAnim.clear();
+    hot = cand = null;
     names = [];
     root.innerHTML = '';
 
@@ -796,8 +826,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
       heads.push(head);
       names.push(name);
       subLabels[ti] = subRows(ti).map((id, j) => {
-        const el = h('div', 'sublabel', PARAM_BY_ID[id].label);
-        el.style.height = el.style.lineHeight = `${rowH(ti, j)}px`;
+        const el = h('div', 'sublabel');
+        el.append(h('div', 'subname', PARAM_BY_ID[id].label), h('div', 'subdesc', describe(id)));
+        el.style.height = `${rowH(ti, j)}px`;
         headCol.append(el);
         return el;
       });
@@ -823,7 +854,10 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   // ---- frame loop -------------------------------------------------------
 
+  let lastFrame = performance.now();
   function frame(now: number) {
+    animateRows(now, Math.min(0.1, (now - lastFrame) / 1000));
+    lastFrame = now;
     if (t.playing) {
       const bpm = toReal(PARAM_BY_ID.tempo, p.params.tempo);
       t.phase = (t.enginePhase + (now - t.posAt) / 1000 / (60 / bpm / 4)) % SONG_STEPS;

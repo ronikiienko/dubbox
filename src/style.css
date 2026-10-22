@@ -62,8 +62,11 @@ header {
 .head.muted .name { opacity: 0.3; }
 .name { font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
 .name:hover { color: var(--accent); }
-.sublabel { height: 22px; line-height: 22px; padding-left: 14px; color: var(--dim); font-size: 10px; }
-.sublabel.hot { color: var(--accent); }
+.sublabel { height: 22px; overflow: hidden; padding-left: 14px; color: var(--dim); font-size: 10px; }
+.subname { height: 22px; line-height: 22px; }
+.subdesc { color: var(--dim); line-height: 1.35; padding-right: 6px; opacity: 0; transition: opacity 0.15s; }
+.sublabel.hot .subname { color: var(--accent); }
+.sublabel.hot .subdesc { opacity: 1; }
 .name.throw { color: var(--red); }
 
 .toggles { display: flex; gap: 4px; }

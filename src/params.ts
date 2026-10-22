@@ -96,6 +96,21 @@ export const lockIds = (i: number) => [
 
 export const SWING = [50, 54, 58, 62, 66, 75];
 
+/** One-line explanations of the per-note values, shown when a value row is expanded. */
+const DESCRIPTIONS: Record<string, string> = {
+  lp: 'Lowpass. Lower = darker, softer.',
+  res: 'Filter resonance. Higher = ringing, squelchy.',
+  hp: 'Highpass. Cuts the low end. 0 = off.',
+  decay: 'How long the note rings. Middle = default.',
+  dst: 'Saturation. More grit, same loudness.',
+  phs: 'Phaser: slow swirling sweep. 0 = off.',
+  lvl: 'Volume. Middle = default, top = +6 dB.',
+  pan: 'Left ↔ right. Middle = centre.',
+  dly: 'Send to the tape delay (shared echo).',
+  rev: 'Send to the reverb (shared room).',
+};
+export const describe = (id: string) => DESCRIPTIONS[id.slice(id.lastIndexOf('.') + 1)] ?? '';
+
 /** HP range per voice, so every position actually cuts into that instrument (hats live above 8 kHz). */
 const HP_RANGE: Record<string, [number, number]> = {
   kick: [30, 1000],
