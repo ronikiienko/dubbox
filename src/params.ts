@@ -85,12 +85,12 @@ export const TRACKS: TrackDef[] = [
   { name: 'CHORD', slide: true, voice: ['chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
 ];
 
-export const mixId = (i: number, k: 'dst' | 'phs' | 'lvl' | 'dly' | 'rev') => `mix.${i}.${k}`;
+export const mixId = (i: number, k: 'dst' | 'phs' | 'lvl' | 'pan' | 'dly' | 'rev') => `mix.${i}.${k}`;
 
-/** A track's per-note values, in signal-flow order: voice → Dist → Phs → Lvl → sends. */
+/** A track's per-note values, in signal-flow order: voice → Dist → Phs → Lvl → Pan, plus sends. */
 export const lockIds = (i: number) => [
   ...TRACKS[i].voice,
-  mixId(i, 'dst'), mixId(i, 'phs'), mixId(i, 'lvl'), mixId(i, 'dly'), mixId(i, 'rev'),
+  mixId(i, 'dst'), mixId(i, 'phs'), mixId(i, 'lvl'), mixId(i, 'pan'), mixId(i, 'dly'), mixId(i, 'rev'),
 ];
 
 export const SWING = [50, 54, 58, 62, 66, 75];
@@ -145,6 +145,10 @@ export const PARAMS: ParamDef[] = [
   ...TRACKS.flatMap((_, i) => [
     p({ id: mixId(i, 'dst'), label: 'Dist', min: 0, max: 1, def: 0, curve: 'lin' }),
     p({ id: mixId(i, 'lvl'), label: 'Lvl', min: 0, max: 1.4, def: 0.7, curve: 'lin' }), // middle = default, top = +6 dB
+    p({
+      id: mixId(i, 'pan'), label: 'Pan', min: -1, max: 1, def: 0, curve: 'lin', bipolar: true,
+      fmt: (v) => (Math.abs(v) < 0.01 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100)),
+    }),
     p({ id: mixId(i, 'dly'), label: 'Dly', min: 0, max: 1, def: 0, curve: 'lin' }),
     p({ id: mixId(i, 'rev'), label: 'Rev', min: 0, max: 1, def: 0, curve: 'lin' }),
     p({ id: mixId(i, 'phs'), label: 'Phs', min: 0, max: 1, def: 0, curve: 'lin' }),

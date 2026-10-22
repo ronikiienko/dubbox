@@ -61,9 +61,9 @@ Every voice has **exactly the same** per-note values.
 | **HP** | highpass, 12 dB. Position 0 = off (bypassed) | 30 Hz–1 kHz | 3–16 kHz | 200 Hz–8 kHz | bass 30 Hz–2 kHz, chord 60 Hz–4 kHz |
 | **Decay** | length | ✓ | ✓ | ✓ | ✓ |
 | **Dist** | saturation, loudness-matched | ✓ | ✓ | ✓ | ✓ |
-| Phs · Lvl · Dly · Rev | mixer | ✓ | ✓ | ✓ | ✓ |
+| Phs · Lvl · **Pan** · Dly · Rev | mixer; Pan defaults to centre, equal-power, sends stay centred (pre-pan) | ✓ | ✓ | ✓ | ✓ |
 
-Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Dly, Rev, identical on every track.
+Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Pan, Dly, Rev, identical on every track.
 Copying notes between tracks carries every value by its knob position.
 
 ### Effects (global)
@@ -113,7 +113,7 @@ Knobs: 5 FX + 4 global = **9**. Everything else is per note.
 - **⌘Z / ⇧⌘Z** undo / redo (100 steps) for all note edits: clicks, paints, drags, bar edits, region edits. Mutes/solo and global knobs are not in the history.
 
 ### 3.3 Defaults in the middle
-Values with a neutral "normal" default sit at the **middle position** (4 of 0–8), so every note can go either way: **Decay** (range centred on the default), **Lvl** (0 … 2× default, top = +6 dB), **LP on BASS/CHORD** (±3 octaves). Values whose natural default is "off" or "open" stay at the edge: HP, Dist, Phs, Dly, Rev, Res, drum LP (fully open).
+Values with a neutral "normal" default sit at the **middle position** (4 of 0–8), so every note can go either way: **Decay** (range centred on the default), **Lvl** (0 … 2× default, top = +6 dB), **Pan** (centre), **LP on BASS/CHORD** (±3 octaves). Values whose natural default is "off" or "open" stay at the edge: HP, Dist, Phs, Dly, Rev, Res, drum LP (fully open).
 
 ### 3.4 Stepped knobs
 Every knob snaps to fixed positions: **9** by default (0, ⅛ … 1; bipolar knobs have a centre). Exceptions: Root 12 notes, Delay Time 5, Swing 50/54/58/62/66/75 %, Tempo whole bpm. Locks are stored as position indices.
@@ -315,7 +315,7 @@ A new project (first launch and **NEW**) is **empty**: no steps on the 300-bar t
 
 ## 11. Out of scope (v1). Do not build.
 
-Plugins · audio import/samples · patterns/loops · piano roll · automation lanes · MIDI · per-track effects beyond the phaser · EQ · panning · presets browser · themes · mobile layout.
+Plugins · audio import/samples · patterns/loops · piano roll · automation lanes · MIDI · per-track effects beyond the phaser · EQ · presets browser · themes · mobile layout.
 
 Candidates for v2, only if missing after real use: MIDI clock out/in, zoom, drift knob, A/B scenes + morph, sampler/bit mode inside TAPE, Tauri desktop build.
 

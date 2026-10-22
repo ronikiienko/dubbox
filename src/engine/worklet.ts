@@ -55,9 +55,11 @@ class Engine extends AudioWorkletProcessor {
   private lvlT = new Float64Array(N);
   private dlyT = new Float64Array(N);
   private revT = new Float64Array(N);
+  private panT = new Float64Array(N);
   private lvl: Smooth[];
   private dly: Smooth[];
   private rev: Smooth[];
+  private pan: Smooth[];
   private vol: Smooth;
 
   // fx + master
@@ -78,6 +80,7 @@ class Engine extends AudioWorkletProcessor {
     this.lvl = TRACKS.map(() => new Smooth(0, a));
     this.dly = TRACKS.map(() => new Smooth(0, a));
     this.rev = TRACKS.map(() => new Smooth(0, a));
+    this.pan = TRACKS.map(() => new Smooth(0, a));
     this.vol = new Smooth(0, a);
     for (const d of PARAMS) this.norm[d.id] = d.defN;
     this.port.onmessage = (e: MessageEvent<ToEngine>) => this.onMessage(e.data);
@@ -161,6 +164,7 @@ class Engine extends AudioWorkletProcessor {
     this.lvlT[t] = audible(this.tracks, t) ? R[mixId(t, 'lvl')] : 0;
     this.dlyT[t] = this.throws[t] ? 1 : R[mixId(t, 'dly')];
     this.revT[t] = R[mixId(t, 'rev')];
+    this.panT[t] = R[mixId(t, 'pan')];
     const hpId = this.hpIds[t];
     const hp = hpHz(hpId.slice(0, hpId.indexOf('.')), R[hpId]);
     this.hpOn[t] = hp > 0;
@@ -240,7 +244,7 @@ class Engine extends AudioWorkletProcessor {
       for (let t = 0; t < N; t++) vals[t] = this.voices[t].process();
 
       // per track: highpass → dist → phaser → fader → post-fader sends
-      let dry = 0, dIn = 0, rIn = 0;
+      let dryL = 0, dryR = 0, dIn = 0, rIn = 0;
       for (let t = 0; t < N; t++) {
         const g = this.lvl[t].next(this.lvlT[t]);
         let x = vals[t];
@@ -249,7 +253,11 @@ class Engine extends AudioWorkletProcessor {
           x = this.hps[t].hp;
         }
         const v = this.phasers[t].process(this.drives[t].process(x)) * g;
-        dry += v;
+        // equal-power pan, scaled so centre = unity on both sides (sounds exactly like no pan)
+        const th = (this.pan[t].next(this.panT[t]) + 1) * (Math.PI / 4);
+        dryL += v * Math.SQRT2 * Math.cos(th);
+        dryR += v * Math.SQRT2 * Math.sin(th);
+        // sends are taken before the pan: echo and room stay one centred space
         dIn += v * this.dly[t].next(this.dlyT[t]);
         rIn += v * this.rev[t].next(this.revT[t]);
       }
@@ -258,7 +266,7 @@ class Engine extends AudioWorkletProcessor {
       const dl = this.delay.l, dr = this.delay.r;
       this.reverb.process(rIn + 0.125 * (dl + dr));
 
-      this.glue.process(dry + dl + this.reverb.l, dry + dr + this.reverb.r);
+      this.glue.process(dryL + dl + this.reverb.l, dryR + dr + this.reverb.r);
       this.tape.process(this.glue.l, this.glue.r);
 
       const g = this.vol.next(vol);
