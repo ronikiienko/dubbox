@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/0cf6a14f-f53a-435a-91c5-f45d84d625f5
+
 # DUBBOX
 
 A tiny browser groovebox for dub techno and 90s techno. One screen, one 300-bar song, every sound shaped **per note**.
