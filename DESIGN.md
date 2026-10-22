@@ -96,8 +96,8 @@ There are **no knobs**. Everything is per note, and the song-wide values are row
 
 ### 3.1 Per-note values (locks)
 - A track's sound is set **only per note**: its instrument values plus Lvl, Dly, Rev, Phs. There are no knobs at all: song-wide values live on the GLOBAL lane (3.5).
-- **Click a track name** to expand it (one at a time). Under its lane, one row per value shows a **bar per note**: bright = this note has its own value, faint = the fixed default.
-- **The row the mouse rests on grows** (22 → 80 px) after a 150 ms dwell, easing open/closed over ~120 ms, so passing over rows doesn't make them flap. It grows downward so the mouse stays in it, prints each note's position as a number (0–8, or −4…+4 for Pan), and its label reveals a one-line description of the value. The row stays locked while a drag is running.
+- **Every value row is always visible**, compact (5–14 px, fitted to the window), as a **heat strip**: each note is a cell, faint at the default, warm when above it, cool when below, brighter the further away. An untouched song looks clean; every tweak stands out. Lanes and rows share the panel height; when they can't fit at their minimums the panel scrolls vertically (the vertical wheel then scrolls it, the ruler stays on top).
+- **The row the mouse rests on grows into the editor** (→ 80 px, bars per note: bright = own value, faint = default) after a 150 ms dwell, easing open/closed over ~120 ms, so passing over rows doesn't make them flap. It grows downward so the mouse stays in it, prints each note's position as a number (0–8, or −4…+4 for Pan), and its label reveals a one-line description of the value. The row stays locked while a drag is running.
 - Drag a bar up/down = set that note's value. Drag across a row = draw values over every note you pass (bar height follows the mouse). Double-click a bar = back to the default.
 - **A new note copies the values of the previous note** on its track (or uses the defaults if it's the first). Painting a run carries the current sound forward.
 - Old saves: track knob settings that differ from the default are baked into the notes that used them.
@@ -118,7 +118,7 @@ Values with a neutral "normal" default sit at the **middle position** (4 of 0–
 
 ### 3.5 GLOBAL lane
 The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swing, Vol, Delay Time / Fbk / Tone, Reverb Size, Tape Age**.
-- **No notes to place.** Every step has a value. Expand GLOBAL (click its name) and draw in its rows like any value row: a value set on a step **holds until the next set value**; before the first one, the default. Held stretches are drawn dim, set steps bright (with their value when the row is hot).
+- **No notes to place.** Every step has a value. Draw in its rows like any value row: a value set on a step **holds until the next set value**; before the first one, the default. Held stretches are drawn dim, set steps bright (with their value when the row is hot).
 - Double-click a set step = remove it (the previous value holds through). Dice only touches set values (or the hovered step).
 - The collapsed lane marks the steps where something changes, with the scale's name if Scale changes there.
 - No mute/solo/throw. Selection, copy/paste (only GLOBAL → GLOBAL, so ruler copies carry their section's tempo/scale), undo all work.

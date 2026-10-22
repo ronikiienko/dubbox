@@ -60,14 +60,14 @@ header {
   gap: 14px;
 }
 .col { display: flex; flex-direction: column; }
-.ruler-gap { height: 20px; }
+.ruler-gap { height: 20px; flex: none; position: sticky; top: 0; z-index: 1; background: var(--panel); }
 .head { display: flex; align-items: center; flex: none; }
 .head { justify-content: space-between; }
 .head.muted .name { opacity: 0.3; }
-.name { font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
-.name:hover { color: var(--accent); }
+.name { font-weight: 700; letter-spacing: 0.1em; }
 .sublabel { flex: none; height: 22px; overflow: hidden; padding-left: 14px; color: var(--dim); font-size: 10px; }
-.subname { height: 22px; line-height: 22px; }
+.subname { font-size: 7px; line-height: 8px; white-space: nowrap; }
+.sublabel.hot .subname { font-size: 10px; line-height: 22px; }
 .subdesc { color: var(--dim); line-height: 1.35; padding-right: 6px; opacity: 0; transition: opacity 0.15s; }
 .sublabel.hot .subname { color: var(--accent); }
 .sublabel.hot .subdesc { opacity: 1; }

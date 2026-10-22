@@ -45,15 +45,17 @@ const THROW_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY'];
 
 // timeline geometry (px)
 const CELL = 22;
-const ROW_MIN = 34; // track lanes stretch between these to fill the screen
-const ROW_MAX = 84;
+const ROW_MIN = 28; // track lanes stretch between these to fill the screen
+const ROW_MAX = 60;
 const RULER_H = 20;
-const PAD = 9;
-const SUB_H = 22; // per-note bar rows of an expanded track
+const SUB_MIN = 5; // value rows are compact (a heat strip) and stretch between these to fill the screen
+const SUB_MAX = 14;
+const HEAT_BELOW = 16; // rows shorter than this draw as heat, taller as bars
 const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
 const HOT_DWELL = 150; // ms the mouse must rest on a row before it grows/hands over
 const HOT_PAD_TOP = 13; // room for the value numbers
 const HOT_PAD_BOTTOM = 2;
+const PANEL_BG = '#151513';
 const COLORS = {
   bg: '#0d0d0c',
   cell: '#1f1e1b',
@@ -81,12 +83,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let scroller: HTMLElement, canvas: HTMLCanvasElement;
   let startStep = 0; // where Play starts (set by clicking the ruler)
   let follow = true; // keep the playhead in view while playing
-  let expanded = -1; // track showing its per-note bar rows
   let resizeObs: ResizeObserver | undefined;
   let help: HTMLElement, helpBtn: HTMLButtonElement;
   let helpOpen = false;
   let tracksEl: HTMLElement;
   let mainH = 52; // height of a track's main lane, fitted to the window
+  let subH = 8; // height of a compact value row, fitted to the window
   let spacerEl: HTMLElement;
   type RowRef = { ti: number; sub: number } | null;
   let hot: RowRef = null; // bar row drawn tall (the one the mouse rested on)
@@ -238,11 +240,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
   }
 
   // ---- lane geometry ----------------------------------------------------
-  // Each track has a main lane; the expanded track adds one bar row per lockable knob.
+  // Each track has a main lane plus one compact row per per-note value, always visible.
 
-  const subRows = (ti: number) => (ti === expanded ? lockIds(ti) : []);
+  const subRows = (ti: number) => lockIds(ti);
   const isHot = (ti: number, j: number) => !!hot && hot.ti === ti && hot.sub === j;
-  const rowH = (ti: number, j: number) => rowAnim.get(`${ti}:${j}`) ?? SUB_H;
+  const rowH = (ti: number, j: number) => rowAnim.get(`${ti}:${j}`) ?? subH;
   const padTop = (ti: number, j: number) => (isHot(ti, j) ? HOT_PAD_TOP : 2);
   const padBottom = (ti: number, j: number) => (isHot(ti, j) ? HOT_PAD_BOTTOM : 2);
   /** Bar area of a row: [top y, height] in which 0..1 is drawn. */
@@ -280,19 +282,27 @@ export function mountUI(root: HTMLElement, initial: Project) {
   }
 
   /**
-   * Lanes share the panel's height, so the whole song fits without scrolling. An expanded track's
-   * rows (and the room a hot row grows into) come off the top first; below ROW_MIN the panel scrolls.
+   * Lanes and value rows share the panel's height, so the whole song fits without scrolling. Room for
+   * the one hot row comes off the top; value rows get what's left after minimum lanes, then lanes
+   * take the rest. Below the minimums the panel scrolls.
    */
   function fitRows() {
     if (!tracksEl) return;
     const cs = getComputedStyle(tracksEl);
     const avail = tracksEl.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - RULER_H - 14; // 14: scrollbar
-    const extra = expanded >= 0 ? lockIds(expanded).length * SUB_H + HOT_H - SUB_H : 0;
-    const next = clamp(Math.floor((avail - extra) / TRACKS.length), ROW_MIN, ROW_MAX);
-    if (next === mainH) return;
+    const rows = TRACKS.reduce((n, _, ti) => n + lockIds(ti).length, 0);
+    const lanes = TRACKS.length;
+    const nextSub = clamp(Math.floor((avail - HOT_H - lanes * ROW_MIN) / rows), SUB_MIN, SUB_MAX);
+    const next = clamp(Math.floor((avail - HOT_H - rows * nextSub) / lanes), ROW_MIN, ROW_MAX);
+    if (next === mainH && nextSub === subH) return;
     mainH = next;
+    subH = nextSub;
     heads.forEach((el) => (el.style.height = `${mainH}px`));
+    subLabels.forEach((labels, ti) => labels.forEach((el, j) => (el.style.height = `${rowH(ti, j)}px`)));
   }
+
+  /** The ruler sticks to the top of the visible panel. */
+  const rulerY = () => Math.max(0, Math.min(tracksEl?.scrollTop ?? 0, totalH() - RULER_H));
 
   const sameRow = (a: RowRef, b: RowRef) => a?.ti === b?.ti && a?.sub === b?.sub;
 
@@ -306,8 +316,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
     let changed = false;
     subLabels.forEach((labels, ti) => labels.forEach((el, j) => {
       const key = `${ti}:${j}`;
-      const cur = rowAnim.get(key) ?? SUB_H;
-      const target = isHot(ti, j) ? HOT_H : SUB_H;
+      const cur = rowAnim.get(key) ?? subH;
+      const target = isHot(ti, j) ? HOT_H : subH;
       const next = Math.abs(target - cur) < 0.5 ? target : cur + (target - cur) * k;
       el.classList.toggle('hot', isHot(ti, j));
       if (next === cur) return;
@@ -370,7 +380,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const x = e.offsetX + scroller.scrollLeft;
       const si = clamp(Math.floor(x / CELL), 0, SONG_STEPS - 1);
       const y = e.offsetY;
-      if (y < RULER_H) return { si, ti: -1, sub: -1, rowTop: 0, ruler: true };
+      if (y < rulerY() + RULER_H) return { si, ti: -1, sub: -1, rowTop: 0, ruler: true };
       for (let ti = 0; ti < TRACKS.length; ti++) {
         const top = laneTop(ti);
         if (y < top + mainH) return { si, ti, sub: -1, rowTop: top, ruler: false };
@@ -535,7 +545,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       }
     });
 
-    // Vertical wheel over an active step = note. Otherwise wheel scrolls the timeline.
+    // Vertical wheel over an active step = note. Otherwise wheel scrolls the timeline (or the panel, see below).
     scroller.addEventListener('wheel', (e) => {
       const vertical = Math.abs(e.deltaY) > Math.abs(e.deltaX) && !e.shiftKey;
       if (vertical && e.target === canvas) {
@@ -547,6 +557,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
           return;
         }
       }
+      // when the lanes don't fit, the vertical wheel scrolls the panel (natively); otherwise the song
+      if (vertical && tracksEl.scrollHeight > tracksEl.clientHeight) return;
       setFollow(false);
       if (vertical) {
         e.preventDefault();
@@ -566,23 +578,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const H = totalH();
     ctx.clearRect(0, 0, w, H);
 
-    // ruler: bar numbers + start marker
-    ctx.font = '10px ui-monospace, Menlo, monospace';
-    ctx.textBaseline = 'middle';
+    // bar lines
     for (let b = Math.floor(first / STEPS_PER_BAR); b * STEPS_PER_BAR <= last; b++) {
-      const x = b * STEPS_PER_BAR * CELL - x0;
       ctx.fillStyle = COLORS.line;
-      ctx.fillRect(x, 0, 1, H);
-      ctx.fillStyle = COLORS.dim;
-      ctx.fillText(String(b + 1), x + 4, RULER_H / 2);
+      ctx.fillRect(b * STEPS_PER_BAR * CELL - x0, 0, 1, H);
     }
-    const sx = startStep * CELL - x0;
-    ctx.fillStyle = COLORS.accent;
-    ctx.beginPath();
-    ctx.moveTo(sx, RULER_H - 7);
-    ctx.lineTo(sx + 7, RULER_H - 7);
-    ctx.lineTo(sx, RULER_H);
-    ctx.fill();
 
     // lanes
     ctx.textAlign = 'center';
@@ -590,8 +590,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
     for (let ti = 0; ti < TRACKS.length; ti++) {
       const tr = p.tracks[ti];
       const top = laneTop(ti);
-      const y = top + PAD;
-      const hh = mainH - PAD * 2;
+      const pad = Math.round(mainH * 0.17);
+      const y = top + pad;
+      const hh = mainH - pad * 2;
       const ids = lockIds(ti);
       ctx.globalAlpha = audible(p.tracks, ti) ? 1 : 0.3;
       const g = TRACKS[ti].global;
@@ -626,11 +627,30 @@ export function mountUI(root: HTMLElement, initial: Project) {
         }
       }
 
-      // bar rows of the expanded track: one bar per note, height = value
+      // value rows: compact = heat strip of how far each note is from the default, hot = bars
       subRows(ti).forEach((id, j) => {
         const d = PARAM_BY_ID[id];
         const rowTop = subTop(ti, j);
         const height = rowH(ti, j);
+        if (height < HEAT_BELOW) {
+          const arr = tr.locks[id];
+          let held = g ? noteValue(ti, id, first) : 0;
+          for (let si = first; si <= last; si++) {
+            if (!tr.s[si]) continue;
+            if (g && arr[si] !== NO_LOCK) held = fromIndex(d, arr[si]);
+            const n = g ? held : noteValue(ti, id, si);
+            const dv = n - d.defN;
+            const room = dv > 0 ? 1 - d.defN : d.defN;
+            const k = room > 0 ? Math.min(1, Math.abs(dv) / room) : 0;
+            // warm = above the default, cool = below, brighter = further; untouched = faint
+            ctx.fillStyle = k < 0.01 ? COLORS.cell : dv > 0 ? `rgba(232, 163, 61, ${0.25 + 0.75 * k})` : `rgba(110, 160, 230, ${0.25 + 0.75 * k})`;
+            const x = si * CELL - x0;
+            // GLOBAL values run on, so their cells join up
+            if (g) ctx.fillRect(x, rowTop + 1, CELL, height - 1);
+            else ctx.fillRect(x + 2, rowTop + 1, CELL - 4, height - 1);
+          }
+          return;
+        }
         const pad = padTop(ti, j);
         const span = barSpan(ti, j);
         const bottom = rowTop + height - padBottom(ti, j);
@@ -672,6 +692,27 @@ export function mountUI(root: HTMLElement, initial: Project) {
       ctx.globalAlpha = 1;
     }
     ctx.textAlign = 'left';
+
+    // ruler (stays on top while the panel scrolls vertically): bar numbers + start marker
+    const ry = rulerY();
+    ctx.fillStyle = PANEL_BG;
+    ctx.fillRect(0, ry, w, RULER_H);
+    ctx.font = '10px ui-monospace, Menlo, monospace';
+    ctx.textBaseline = 'middle';
+    for (let b = Math.floor(first / STEPS_PER_BAR); b * STEPS_PER_BAR <= last; b++) {
+      const x = b * STEPS_PER_BAR * CELL - x0;
+      ctx.fillStyle = COLORS.line;
+      ctx.fillRect(x, ry, 1, RULER_H);
+      ctx.fillStyle = COLORS.dim;
+      ctx.fillText(String(b + 1), x + 4, ry + RULER_H / 2);
+    }
+    const sx = startStep * CELL - x0;
+    ctx.fillStyle = COLORS.accent;
+    ctx.beginPath();
+    ctx.moveTo(sx, ry + RULER_H - 7);
+    ctx.lineTo(sx + 7, ry + RULER_H - 7);
+    ctx.lineTo(sx, ry + RULER_H);
+    ctx.fill();
 
     // selection + where a paste would land (while ⌘/Ctrl is held)
     const box = (r: Region) => {
@@ -795,19 +836,16 @@ export function mountUI(root: HTMLElement, initial: Project) {
     // tracks: heads | scrolling timeline
     const tracks = h('main', 'tracks');
     tracksEl = tracks;
+    tracks.addEventListener('scroll', () => drawTimeline());
     const headCol = h('div', 'col');
     headCol.append(h('div', 'ruler-gap'));
     TRACKS.forEach((td, ti) => {
       const head = h('div', 'head');
       head.style.height = `${mainH}px`;
-      const name = h('div', 'name', (ti === expanded ? '▾ ' : '▸ ') + td.name);
+      const name = h('div', 'name', td.name);
       name.title = td.global
-        ? 'click = show the song-wide values (scale, key, tempo, FX)'
-        : `click = show sound per note · hold ${THROW_KEYS[ti].slice(3)} = dub throw · ${ti + 1} = mute · shift+${ti + 1} = solo`;
-      name.addEventListener('click', () => {
-        expanded = expanded === ti ? -1 : ti;
-        build();
-      });
+        ? 'song-wide values: scale, key, tempo, FX'
+        : `hold ${THROW_KEYS[ti].slice(3)} = dub throw · ${ti + 1} = mute · shift+${ti + 1} = solo`;
       const toggles = h('div', 'toggles');
       if (!td.global) toggles.append(
         button('M', 'tog mute', () => { p.tracks[ti].mute = !p.tracks[ti].mute; flagsChanged(ti); }),
