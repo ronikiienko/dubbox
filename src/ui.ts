@@ -39,9 +39,8 @@ const PAD = 9;
 const SUB_H = 22; // per-note bar rows of an expanded track
 const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
 const HOT_DWELL = 150; // ms the mouse must rest on a row before it grows
-const HOT_LEAVE = 400; // ms away before the grown row shrinks again (slips don't collapse it)
-const HOT_MARGIN = 24; // px above/below the grown row where it holds on even longer
-const HOT_LEAVE_NEAR = 800; // ms before shrinking while the mouse is just outside it (overshooting the max)
+const HOT_LEAVE = 250; // ms away before the grown row hands over / shrinks
+const HOT_MARGIN = 8; // px just outside the grown row that still count as on it (overshooting the max)
 const COLORS = {
   bg: '#0d0d0c',
   cell: '#1f1e1b',
@@ -87,7 +86,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let hot: RowRef = null; // bar row drawn tall (the one the mouse rested on)
   let cand: RowRef = null; // row under the mouse right now; becomes hot after HOT_DWELL ms
   let candSince = 0;
-  let candNear = false; // mouse is just outside the grown row
   let gesture = false; // a drag is running: hot row is locked
   const rowAnim = new Map<string, number>(); // animated row heights
   let subLabels: HTMLElement[][] = [];
@@ -341,7 +339,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
    * over rows doesn't make them flap), then ease every row's height toward its target.
    */
   function animateRows(now: number, dt: number) {
-    const wait = hot && !sameRow(cand, hot) ? (candNear ? HOT_LEAVE_NEAR : HOT_LEAVE) : HOT_DWELL;
+    const wait = hot && !sameRow(cand, hot) ? HOT_LEAVE : HOT_DWELL;
     if (!gesture && !sameRow(cand, hot) && now - candSince > wait) hot = cand;
     const k = 1 - Math.exp(-dt / 0.04); // ~120 ms to settle
     let changed = false;
@@ -480,13 +478,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const h0 = hit(e);
       hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
       // the hot row stays locked while a gesture is running, so a stroke never jumps rows
-      const c: RowRef = h0.sub >= 0 ? { ti: h0.ti, sub: h0.sub } : null;
-      // just outside the grown row (e.g. overshooting the max) it waits longer before shrinking,
-      // but neighbours stay reachable: resting on one still switches
-      candNear = false;
+      let c: RowRef = h0.sub >= 0 ? { ti: h0.ti, sub: h0.sub } : null;
       if (hot && hot.ti === expanded) {
+        // a few px past the grown row's edge still count as on it (overshooting the max);
+        // neighbours are 22 px tall, so they stay easy to reach
         const top = subTop(hot.ti, hot.sub);
-        candNear = e.offsetY > top - HOT_MARGIN && e.offsetY < top + rowH(hot.ti, hot.sub) + HOT_MARGIN;
+        if (e.offsetY > top - HOT_MARGIN && e.offsetY < top + rowH(hot.ti, hot.sub) + HOT_MARGIN) c = hot;
       }
       if (!sameRow(c, cand)) {
         cand = c;
