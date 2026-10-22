@@ -28,16 +28,9 @@
 body { margin: 0; user-select: none; min-height: 100vh; }
 #app { height: 100vh; padding: 16px 24px; display: flex; flex-direction: column; gap: 10px; }
 
-/* film grain over everything (static noise, never catches the mouse) */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 100;
-  opacity: 0.07;
-  mix-blend-mode: screen;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+/* film grain on the backdrop only, so text and steps stay crisp */
+body {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='0.08'/%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.09'/%3E%3C/svg%3E");
 }
 
 /* ---- panels: brushed metal with a bevel ---- */
@@ -148,7 +141,7 @@ body.playing .vinyl { animation-play-state: running; }
   padding-top: 3px;
 }
 .name.throw { color: var(--red); text-shadow: 0 0 8px rgba(255, 75, 43, 0.6); }
-.sublabel { position: relative; cursor: pointer; flex: none; padding-left: 14px; color: var(--dim); font-size: 10px; }
+.sublabel { position: relative; cursor: pointer; flex: none; padding-left: 14px; color: #a39b88; font-size: 10px; }
 .sublabel:hover .subname { color: var(--text); }
 /* compact: names hang centred on their row, staggered across columns (--col) */
 .subname {
@@ -157,14 +150,14 @@ body.playing .vinyl { animation-play-state: running; }
   top: 50%;
   transform: translateY(-50%);
   font-family: var(--display);
-  font-size: 12px;
-  letter-spacing: 0.06em;
+  font-size: 13px;
+  letter-spacing: 0.08em;
   line-height: 1;
   padding-top: 2px;
   white-space: nowrap;
   pointer-events: none;
 }
-.subdesc { display: none; color: var(--dim); line-height: 1.35; padding-right: 6px; }
+.subdesc { display: none; color: #a39b88; font-family: var(--mono); line-height: 1.35; padding-right: 6px; }
 .sublabel.hot { overflow: hidden; }
 .sublabel.hot .subname { position: static; transform: none; color: var(--accent); font-size: 14px; line-height: 22px; }
 .sublabel.hot .subdesc { display: block; }

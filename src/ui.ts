@@ -58,8 +58,8 @@ const HOT_PAD_BOTTOM = 2;
 const PANEL_BG = '#191816';
 const COLORS = {
   bg: '#0b0a09',
-  cell: '#11100e', // recessed step
-  beat: '#171613',
+  cell: '#141311', // recessed step
+  beat: '#2a2722', // every 4th step, clearly lighter than the rest
   line: '#2c2a25',
   dim: '#6d675b',
   text: '#e6dfcc',
