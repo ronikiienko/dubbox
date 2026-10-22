@@ -581,9 +581,18 @@ export function mountUI(root: HTMLElement, initial: Project) {
         for (let si = first; si <= last; si++) {
           if (!tr.s[si]) continue;
           const locked = arr[si] !== NO_LOCK;
-          const bh = Math.max(2, noteValue(ti, id, si) * (SUB_H - 4));
+          const n = noteValue(ti, id, si);
+          const span = SUB_H - 4;
           ctx.fillStyle = locked ? COLORS.text : COLORS.line;
-          ctx.fillRect(si * CELL - x0 + 4, rowTop + SUB_H - 2 - bh, CELL - 8, bh);
+          if (PARAM_BY_ID[id].bipolar) {
+            // grows up/down from the centre line (e.g. Pan: up = right, down = left)
+            const mid = rowTop + 2 + span / 2;
+            const bh = Math.max(2, Math.abs(n - 0.5) * span);
+            ctx.fillRect(si * CELL - x0 + 4, n >= 0.5 ? mid - bh : mid, CELL - 8, bh);
+          } else {
+            const bh = Math.max(2, n * span);
+            ctx.fillRect(si * CELL - x0 + 4, rowTop + SUB_H - 2 - bh, CELL - 8, bh);
+          }
         }
       });
       ctx.globalAlpha = 1;
