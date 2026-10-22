@@ -1,4 +1,4 @@
-import { DelayLine, Noise, OnePole, Smooth, TAU, clamp, dbToGain, lpCoef, tanh, timeCoef } from './dsp';
+import { DelayLine, Noise, OnePole, SVF, Smooth, TAU, clamp, dbToGain, lpCoef, tanh, timeCoef } from './dsp';
 
 /** Tape echo: HP + LP + tanh inside the feedback loop, slewed time, wow. */
 export class TapeDelay {
@@ -223,23 +223,65 @@ export class Glue {
   }
 }
 
-/** Master tape macro. Age 0..1 drives saturation, wow/flutter, HF loss, hiss and low bump together. */
+/** Smooth random LFO in -1..1: glides to a new random target every `period` seconds (±50%). */
+class Wander {
+  private v = 0;
+  private target = 0;
+  private left = 0;
+  constructor(private sr: number, private period: number, private glide: number, private noise: Noise) {}
+  next(): number {
+    if (--this.left <= 0) {
+      this.target = this.noise.next();
+      this.left = Math.floor(this.period * this.sr * (0.5 + Math.abs(this.noise.next())));
+    }
+    return (this.v += this.glide * (this.target - this.v));
+  }
+}
+
+/**
+ * Master tape macro. One knob, Age 0..1: 0 clean · 0.3 warm · 0.6 good cassette · 1 worn dub cassette.
+ * Chain per channel: pre-emphasis → level-matched saturation → de-emphasis → head bump → low cut
+ * → stereo narrowing → wow/flutter (random, shared transport) → dropouts → hiss → top roll-off.
+ */
 export class Tape {
+  private age = 0;
+  // saturation: highs boosted before and cut after, so they compress more (tape "softness")
+  private satL: Drive;
+  private satR: Drive;
+  private preL = new OnePole();
+  private preR = new OnePole();
+  private deL = new OnePole();
+  private deR = new OnePole();
+  private emphA: number;
+  private emph = 0;
+  // frequency response
+  private bumpL = new SVF();
+  private bumpR = new SVF();
+  private bumpK = 0;
+  private hpL = new SVF();
+  private hpR = new SVF();
+  private lpL = new SVF();
+  private lpR = new SVF();
+  private width = 1;
+  // transport
   private dlL: DelayLine;
   private dlR: DelayLine;
   private base: number;
-  private wow = 0;
-  private flutter = 0;
-  private depth = 0;
-  private drive = 1;
-  private norm = 1;
-  private hfA = 1;
-  private lpL = [new OnePole(), new OnePole()];
-  private lpR = [new OnePole(), new OnePole()];
-  private bumpL = new OnePole();
-  private bumpR = new OnePole();
-  private bumpA: number;
-  private bumpK = 0;
+  private noise = new Noise(4711);
+  private wow: Wander;
+  private flutL: Wander;
+  private flutR: Wander;
+  private wowDepth = 0;
+  private flutDepth = 0;
+  // dropouts
+  private dropPos = 0;
+  private dropLen = 0;
+  private dropDepth = 0;
+  private dropRate = 0;
+  private dropLpL = new OnePole();
+  private dropLpR = new OnePole();
+  private dropA: number;
+  // hiss
   private hiss = 0;
   private nL = new Noise(777);
   private nR = new Noise(31337);
@@ -249,19 +291,40 @@ export class Tape {
   r = 0;
 
   constructor(private sr: number) {
-    this.dlL = new DelayLine(0.02 * sr);
-    this.dlR = new DelayLine(0.02 * sr);
-    this.base = 0.005 * sr;
-    this.bumpA = lpCoef(80, sr);
+    this.satL = new Drive(sr);
+    this.satR = new Drive(sr);
+    this.emphA = lpCoef(3000, sr);
+    this.dlL = new DelayLine(0.03 * sr);
+    this.dlR = new DelayLine(0.03 * sr);
+    this.base = 0.008 * sr;
+    this.wow = new Wander(sr, 0.6, timeCoef(0.25, sr), this.noise);
+    this.flutL = new Wander(sr, 0.08, timeCoef(0.015, sr), this.noise);
+    this.flutR = new Wander(sr, 0.08, timeCoef(0.015, sr), this.noise);
+    this.dropA = lpCoef(2000, sr);
   }
 
+  /** Called once per block. */
   set(age: number) {
-    this.drive = 1 + 2 * age;
-    this.norm = 1 / Math.pow(this.drive, 0.7);
-    this.hfA = lpCoef(20000 * Math.pow(7000 / 20000, age), this.sr);
-    this.depth = 0.0008 * this.sr * age;
-    this.hiss = dbToGain(-90 + 32 * age);
-    this.bumpK = dbToGain(2 * age) - 1;
+    const a = (this.age = age);
+    const sr = this.sr;
+    this.satL.set(0.55 * a);
+    this.satR.set(0.55 * a);
+    this.emph = 1.5 * a;
+    this.bumpL.set(90, 1, sr);
+    this.bumpR.set(90, 1, sr);
+    this.bumpK = dbToGain(4 * a) - 1;
+    const hp = 10 * Math.pow(5, a); // 10 Hz (inaudible) … 50 Hz
+    this.hpL.set(hp, 0.707, sr);
+    this.hpR.set(hp, 0.707, sr);
+    const lp = 20000 * Math.pow(5000 / 20000, a); // 20 kHz … 5 kHz
+    this.lpL.set(lp, 0.707, sr);
+    this.lpR.set(lp, 0.707, sr);
+    const worn = Math.max(0, (a - 0.4) / 0.6); // 0 below Age 0.4, 1 at max: the 'damaged' artifacts
+    this.width = 1 - 0.7 * worn;
+    this.wowDepth = 0.0018 * sr * a * a; // up to ~1% pitch wander
+    this.flutDepth = 0.00012 * sr * a * a;
+    this.dropRate = (1.5 * worn * worn) / sr; // dropouts per sample: none below Age 0.4, ~1.5/s at max
+    this.hiss = dbToGain(-90 + 45 * a);
   }
 
   private pink(n: Noise, b: Float64Array) {
@@ -273,25 +336,65 @@ export class Tape {
   }
 
   process(l: number, r: number) {
-    const sr = this.sr;
-    this.wow += 0.5 / sr;
-    this.flutter += 6 / sr;
-    if (this.wow >= 1) this.wow -= 1;
-    if (this.flutter >= 1) this.flutter -= 1;
-    const mL = 0.7 * Math.sin(TAU * this.wow) + 0.3 * Math.sin(TAU * this.flutter);
-    const mR = 0.7 * Math.sin(TAU * this.wow + 0.3) + 0.3 * Math.sin(TAU * this.flutter + 1.1);
+    if (this.age === 0) {
+      this.l = l;
+      this.r = r;
+      return;
+    }
+    // pre-emphasis → saturation → de-emphasis (flat when linear, highs squash first when driven)
+    const k = this.emph, ea = this.emphA;
+    l = this.satL.process(l + k * (l - this.preL.lp(l, ea)));
+    r = this.satR.process(r + k * (r - this.preR.lp(r, ea)));
+    const kd = k / (1 + k);
+    l -= kd * (l - this.deL.lp(l, ea));
+    r -= kd * (r - this.deR.lp(r, ea));
 
-    this.dlL.write(tanh(l * this.drive) * this.norm);
-    this.dlR.write(tanh(r * this.drive) * this.norm);
-    l = this.dlL.read(this.base + this.depth * mL);
-    r = this.dlR.read(this.base + this.depth * mR);
+    // head bump + low cut
+    this.bumpL.run(l);
+    this.bumpR.run(r);
+    l += this.bumpK * this.bumpL.bp;
+    r += this.bumpK * this.bumpR.bp;
+    this.hpL.run(l);
+    this.hpR.run(r);
+    l = this.hpL.hp;
+    r = this.hpR.hp;
 
-    l += this.bumpK * this.bumpL.lp(l, this.bumpA);
-    r += this.bumpK * this.bumpR.lp(r, this.bumpA);
-    l = this.lpL[1].lp(this.lpL[0].lp(l, this.hfA), this.hfA);
-    r = this.lpR[1].lp(this.lpR[0].lp(r, this.hfA), this.hfA);
+    // stereo narrowing
+    const mid = (l + r) * 0.5, side = (r - l) * 0.5 * this.width;
+    l = mid - side;
+    r = mid + side;
 
-    this.l = l + this.hiss * this.pink(this.nL, this.pinkL);
-    this.r = r + this.hiss * this.pink(this.nR, this.pinkR);
+    // wow (shared transport) + flutter (slightly different per channel)
+    const w = this.wow.next() * this.wowDepth;
+    this.dlL.write(l);
+    this.dlR.write(r);
+    l = this.dlL.read(this.base + w + this.flutL.next() * this.flutDepth);
+    r = this.dlR.read(this.base + w + this.flutR.next() * this.flutDepth);
+
+    // dropouts: short random dips in level and highs
+    if (this.dropPos >= this.dropLen && this.noise.next() * 0.5 + 0.5 < this.dropRate) {
+      this.dropPos = 0;
+      this.dropLen = Math.floor(this.sr * (0.02 + 0.1 * (this.noise.next() * 0.5 + 0.5)));
+      this.dropDepth = (0.3 + 0.55 * (this.noise.next() * 0.5 + 0.5)) * this.age;
+    }
+    if (this.dropPos < this.dropLen) {
+      const env = 0.5 - 0.5 * Math.cos((TAU * this.dropPos++) / this.dropLen);
+      const d = env * this.dropDepth;
+      l += d * (this.dropLpL.lp(l, this.dropA) - l);
+      r += d * (this.dropLpR.lp(r, this.dropA) - r);
+      l *= 1 - d * 0.6;
+      r *= 1 - d * 0.6;
+    } else {
+      this.dropLpL.lp(l, this.dropA);
+      this.dropLpR.lp(r, this.dropA);
+    }
+
+    // hiss, then the top roll-off over everything (hiss included)
+    l += this.hiss * this.pink(this.nL, this.pinkL);
+    r += this.hiss * this.pink(this.nR, this.pinkR);
+    this.lpL.run(l);
+    this.lpR.run(r);
+    this.l = this.lpL.lp;
+    this.r = this.lpR.lp;
   }
 }

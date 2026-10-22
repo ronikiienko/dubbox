@@ -201,13 +201,12 @@ track: voice ─► hp ─► dist ─► phaser ─► fader ─┬─► sum �
                                  └─► reverb send ─► reverb ret ─► sum
 ```
 - **GLUE** (no knob): RMS compressor, ratio 2:1, attack 10 ms, release 150 ms, threshold ≈ −12 dBFS, ~2 dB GR on a typical mix.
-- **TAPE / Age** (one macro, 0..1, curves tuned by ear):
-  - drive into `tanh`: 1.0 → 3.0
-  - HF loss: LP 20 kHz → 7 kHz
-  - wow/flutter: depth 0 → 0.8 ms (0.5 Hz + 6 Hz components), slight L/R difference
-  - hiss: −90 dBFS → −58 dBFS pink-ish noise
-  - low bump: +0 → +2 dB shelf at 80 Hz
-  - Default Age 0.3 (warm cassette). 1.0 = worn VHS dub.
+- **TAPE / Age** (one macro, 0..1): **0** clean (bypassed) · **0.3** warm (default) · **0.6** good cassette · **1** worn dub cassette.
+  - Saturation: pre-emphasis (highs boosted ~3 kHz) → loudness-matched `Drive` (amount 0.55 × Age) → de-emphasis, so highs compress first (tape softness). Overall level stays within ~0.7 dB at any Age.
+  - Head bump +0…4 dB at 90 Hz; low cut 10 → 50 Hz; top roll-off 20 → 5 kHz (12 dB), applied after the hiss so hiss is rolled off too.
+  - Wow/flutter: random (smooth random targets, not sine LFOs). Wow is shared by both channels (one transport), flutter slightly different per channel. Measured pitch wander ±0.25 % at 0.6, ±0.94 % at 1.
+  - Hiss: pink, −90 → −45 dB.
+  - "Worn" artifacts start only above Age 0.4: stereo narrows toward mono (width 1 → 0.3), and random **dropouts** (20–120 ms dips in level and highs) become more frequent, up to ~1.5/s at max.
 - Final soft clip safety limiter (`tanh` on |x| > 0.9).
 
 ---
