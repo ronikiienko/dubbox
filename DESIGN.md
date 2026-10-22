@@ -58,7 +58,7 @@ Every voice has **exactly the same** per-note values.
 | *Pitch* (per step) | the sound's frequency, ±12 st | sine pitch (base 50 Hz) | noise HP frequency (base 8 kHz) | ring + click frequency (base 1.4 kHz) | note (relative to Root) |
 | **LP** | lowpass on the voice (brightness) | 4-pole ladder after drive | 2× one-pole LP | 4-pole ladder | ladder cutoff (+ envelope) |
 | **Res** | resonance of the voice's filter | ladder res (boom) | HP resonance (ring) | BP Q (ringy ↔ noisy) | ladder res |
-| **HP** | highpass, 12 dB. Position 0 = off (bypassed), 1–8 = ~30 Hz … 2 kHz | ✓ | ✓ | ✓ | ✓ |
+| **HP** | highpass, 12 dB. Position 0 = off (bypassed) | 30 Hz–1 kHz | 3–16 kHz | 200 Hz–8 kHz | bass 30 Hz–2 kHz, chord 60 Hz–4 kHz |
 | **Decay** | length | ✓ | ✓ | ✓ | ✓ |
 | **Dist** | saturation, loudness-matched | ✓ | ✓ | ✓ | ✓ |
 | Phs · Lvl · Dly · Rev | mixer | ✓ | ✓ | ✓ | ✓ |

@@ -95,15 +95,28 @@ export const lockIds = (i: number) => [
 
 export const SWING = [50, 54, 58, 62, 66, 75];
 
-/** Highpass value meaning "off": the filter is bypassed entirely, so the default changes nothing. */
-export const HP_OFF = 18;
+/** HP range per voice, so every position actually cuts into that instrument (hats live above 8 kHz). */
+const HP_RANGE: Record<string, [number, number]> = {
+  kick: [30, 1000],
+  hat: [3000, 16000],
+  perc: [200, 8000],
+  bass: [30, 2000],
+  chord: [60, 4000],
+};
+
+/** HP knob position (0..1) → Hz. Position 0 = 0 = off: the filter is bypassed, so the default changes nothing. */
+export function hpHz(voice: string, n: number): number {
+  if (n < 1 / 16) return 0;
+  const [lo, hi] = HP_RANGE[voice];
+  return lo * Math.pow(hi / lo, (n - 0.125) / 0.875);
+}
 
 /** The shared core every voice has. */
 const core = (k: string, lp: [number, number, number], res: number, decay: [number, number, number]) => [
   p({ id: `${k}.lp`, label: 'LP', min: lp[0], max: lp[1], def: lp[2], curve: 'exp', fmt: hz }),
   p({ id: `${k}.res`, label: 'Res', min: 0, max: 0.95, def: res, curve: 'lin' }),
-  // position 0 = off (bypassed); 1..8 = ~30 Hz … 2 kHz
-  p({ id: `${k}.hp`, label: 'HP', min: HP_OFF, max: 2000, def: HP_OFF, curve: 'exp', fmt: (v) => (v <= HP_OFF * 1.01 ? 'off' : hz(v)) }),
+  // position 0 = off (bypassed); 1..8 = the voice's HP_RANGE
+  p({ id: `${k}.hp`, label: 'HP', min: 0, max: 1, def: 0, curve: 'lin', fmt: (v) => (hpHz(k, v) ? hz(hpHz(k, v)) : 'off') }),
   p({ id: `${k}.decay`, label: 'Decay', min: decay[0], max: decay[1], def: decay[2], curve: 'exp', fmt: sec }),
 ];
 
