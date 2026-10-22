@@ -48,9 +48,10 @@ const CELL = 22;
 const ROW_MIN = 28; // track lanes stretch between these to fill the screen
 const ROW_MAX = 60;
 const RULER_H = 20;
-const SUB_MIN = 13; // value rows are compact (a heat strip) and stretch between these to fill the screen
-const SUB_MAX = 18;
-const HEAT_BELOW = 24; // rows shorter than this draw as heat, taller as bars
+const SUB_MIN = 6; // value rows are compact (a heat strip) and stretch between these to fill the screen
+const SUB_MAX = 14;
+const HEAT_BELOW = 24;
+const LABEL_COLS = 3; // rows shorter than this draw as heat, taller as bars
 const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
 const HOT_PAD_TOP = 13; // room for the value numbers
 const HOT_PAD_BOTTOM = 2;
@@ -850,6 +851,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const el = h('div', 'sublabel');
         el.append(h('div', 'subname', PARAM_BY_ID[id].label), h('div', 'subdesc', describe(id)));
         el.style.height = `${rowH(ti, j)}px`;
+        // names stagger across 3 columns, so each can be taller than its row without touching a neighbour
+        el.style.setProperty('--col', String(j % LABEL_COLS));
         el.addEventListener('click', () => openRow({ ti, sub: j }));
         headCol.append(el);
         return el;

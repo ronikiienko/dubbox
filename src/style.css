@@ -65,12 +65,23 @@ header {
 .head { justify-content: space-between; }
 .head.muted .name { opacity: 0.3; }
 .name { font-weight: 700; letter-spacing: 0.1em; }
-.sublabel { cursor: pointer; flex: none; height: 22px; overflow: hidden; padding-left: 14px; color: var(--dim); font-size: 10px; }
-.subname { font-size: 9px; line-height: 13px; white-space: nowrap; }
-.sublabel.hot .subname { font-size: 10px; line-height: 22px; }
-.subdesc { color: var(--dim); line-height: 1.35; padding-right: 6px; opacity: 0; transition: opacity 0.15s; }
-.sublabel.hot .subname { color: var(--accent); }
-.sublabel.hot .subdesc { opacity: 1; }
+.sublabel { position: relative; cursor: pointer; flex: none; padding-left: 14px; color: var(--dim); font-size: 10px; }
+.sublabel:hover .subname { color: var(--text); }
+/* compact: names hang centred on their row, staggered across columns (--col) */
+.subname {
+  position: absolute;
+  left: calc(14px + var(--col) * 44px);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.subdesc { display: none; color: var(--dim); line-height: 1.35; padding-right: 6px; }
+.sublabel.hot { overflow: hidden; }
+.sublabel.hot .subname { position: static; transform: none; color: var(--accent); line-height: 22px; }
+.sublabel.hot .subdesc { display: block; }
 .name.throw { color: var(--red); }
 
 .toggles { display: flex; gap: 4px; }
