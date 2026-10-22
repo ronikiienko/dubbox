@@ -66,7 +66,7 @@ header {
 .head.muted .name { opacity: 0.3; }
 .name { font-weight: 700; letter-spacing: 0.1em; }
 .sublabel { cursor: pointer; flex: none; height: 22px; overflow: hidden; padding-left: 14px; color: var(--dim); font-size: 10px; }
-.subname { font-size: 7px; line-height: 8px; white-space: nowrap; }
+.subname { font-size: 9px; line-height: 13px; white-space: nowrap; }
 .sublabel.hot .subname { font-size: 10px; line-height: 22px; }
 .subdesc { color: var(--dim); line-height: 1.35; padding-right: 6px; opacity: 0; transition: opacity 0.15s; }
 .sublabel.hot .subname { color: var(--accent); }
