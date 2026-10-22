@@ -112,6 +112,9 @@ export function hpHz(voice: string, n: number): number {
 }
 
 /** The shared core every voice has. */
+/** Exp range centred on `mid`: the default sits exactly at the middle position, `ratio` either way. */
+const around = (mid: number, ratio: number): [number, number, number] => [mid / ratio, mid * ratio, mid];
+
 const core = (k: string, lp: [number, number, number], res: number, decay: [number, number, number]) => [
   p({ id: `${k}.lp`, label: 'LP', min: lp[0], max: lp[1], def: lp[2], curve: 'exp', fmt: hz }),
   p({ id: `${k}.res`, label: 'Res', min: 0, max: 0.95, def: res, curve: 'lin' }),
@@ -120,7 +123,8 @@ const core = (k: string, lp: [number, number, number], res: number, decay: [numb
   p({ id: `${k}.decay`, label: 'Decay', min: decay[0], max: decay[1], def: decay[2], curve: 'exp', fmt: sec }),
 ];
 
-const synthParams = (k: string, lp: number, decay: number) => core(k, [40, 12000, lp], 0.25, [0.03, 2, decay]);
+// Decay (and synth LP) default to the middle position, so every note can go either way.
+const synthParams = (k: string, lp: number, decay: number) => core(k, around(lp, 8), 0.25, around(decay, 6));
 
 export const PARAMS: ParamDef[] = [
   // global
@@ -130,16 +134,17 @@ export const PARAMS: ParamDef[] = [
   p({ id: 'volume', label: 'Vol', min: 0, max: 1, def: 0.8, curve: 'lin' }),
 
   // voices
-  ...core('kick', [150, 12000, 12000], 0, [0.1, 1.2, 0.45]),
-  ...core('hat', [2000, 16000, 16000], 0, [0.015, 0.6, 0.05]),
-  ...core('perc', [500, 12000, 12000], 0.25, [0.02, 0.4, 0.12]),
+  // drum LP defaults fully open (top); Decay defaults to the middle
+  ...core('kick', [150, 12000, 12000], 0, around(0.45, 4)),
+  ...core('hat', [2000, 16000, 16000], 0, around(0.06, 8)),
+  ...core('perc', [500, 12000, 12000], 0.25, around(0.12, 4)),
   ...synthParams('bass', 220, 0.25),
   ...synthParams('chord', 600, 0.35),
 
   // mixer
   ...TRACKS.flatMap((_, i) => [
     p({ id: mixId(i, 'dst'), label: 'Dist', min: 0, max: 1, def: 0, curve: 'lin' }),
-    p({ id: mixId(i, 'lvl'), label: 'Lvl', min: 0, max: 1, def: 0.7, curve: 'lin' }),
+    p({ id: mixId(i, 'lvl'), label: 'Lvl', min: 0, max: 1.4, def: 0.7, curve: 'lin' }), // middle = default, top = +6 dB
     p({ id: mixId(i, 'dly'), label: 'Dly', min: 0, max: 1, def: 0, curve: 'lin' }),
     p({ id: mixId(i, 'rev'), label: 'Rev', min: 0, max: 1, def: 0, curve: 'lin' }),
     p({ id: mixId(i, 'phs'), label: 'Phs', min: 0, max: 1, def: 0, curve: 'lin' }),
@@ -152,7 +157,7 @@ export const PARAMS: ParamDef[] = [
     id: 'delay.tone', label: 'Tone', min: -1, max: 1, def: -0.25, curve: 'lin', bipolar: true,
     fmt: (v) => (v < -0.05 ? 'dark ' + Math.round(-v * 100) : v > 0.05 ? 'thin ' + Math.round(v * 100) : 'flat'),
   }),
-  p({ id: 'reverb.size', label: 'Size', min: 0, max: 1, def: 0.6, curve: 'lin', fmt: (v) => (1.5 * Math.pow(14 / 1.5, v)).toFixed(1) + ' s' }),
+  p({ id: 'reverb.size', label: 'Size', min: 0, max: 1, def: 0.5, curve: 'lin', fmt: (v) => (1.5 * Math.pow(14 / 1.5, v)).toFixed(1) + ' s' }),
   p({ id: 'tape.age', label: 'Age', min: 0, max: 1, def: 0.3, curve: 'lin' }),
 ];
 
