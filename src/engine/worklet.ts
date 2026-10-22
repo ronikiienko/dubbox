@@ -1,10 +1,10 @@
 // The whole engine: clock, sequencer, voices, mixer, FX, master.
 // Runs on the audio thread. Talks to the UI only through `port` (see bridge.ts).
 
-import { PARAMS, PARAM_BY_ID, SWING, TRACKS, fromIndex, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
+import { HP_OFF, PARAMS, PARAM_BY_ID, SWING, TRACKS, fromIndex, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
 import { NO_LOCK, audible, type TrackState } from '../state';
 import type { FromEngine, ToEngine } from './bridge';
-import { Smooth, timeCoef } from './dsp';
+import { SVF, Smooth, timeCoef } from './dsp';
 import { Drive, Glue, Phaser, Reverb, Tape, TapeDelay } from './fx';
 import { Hat, Kick, Perc, Synth, type Voice } from './voices';
 
@@ -47,6 +47,9 @@ class Engine extends AudioWorkletProcessor {
   private chord = new Synth(this.sr, 41, [0, 3, 7, 10], [-6, 2, -2, 6]);
   private voices: Voice[] = [this.kick, this.hat, this.perc, this.bass, this.chord];
   private vals = new Float64Array(N);
+  private hps = TRACKS.map(() => new SVF());
+  private hpOn = new Array<boolean>(N).fill(false);
+  private hpIds = TRACKS.map((td) => td.voice.find((id) => id.endsWith('.hp'))!);
   private drives = TRACKS.map(() => new Drive(this.sr));
   private phasers = TRACKS.map(() => new Phaser(this.sr));
   private lvlT = new Float64Array(N);
@@ -158,6 +161,9 @@ class Engine extends AudioWorkletProcessor {
     this.lvlT[t] = audible(this.tracks, t) ? R[mixId(t, 'lvl')] : 0;
     this.dlyT[t] = this.throws[t] ? 1 : R[mixId(t, 'dly')];
     this.revT[t] = R[mixId(t, 'rev')];
+    const hp = R[this.hpIds[t]];
+    this.hpOn[t] = hp > HP_OFF * 1.01;
+    if (this.hpOn[t]) this.hps[t].set(hp, 0.707, this.sr);
     this.drives[t].set(R[mixId(t, 'dst')]);
     this.phasers[t].set(R[mixId(t, 'phs')]);
     switch (t) {
@@ -232,11 +238,16 @@ class Engine extends AudioWorkletProcessor {
 
       for (let t = 0; t < N; t++) vals[t] = this.voices[t].process();
 
-      // per track: dist → phaser → fader → post-fader sends
+      // per track: highpass → dist → phaser → fader → post-fader sends
       let dry = 0, dIn = 0, rIn = 0;
       for (let t = 0; t < N; t++) {
         const g = this.lvl[t].next(this.lvlT[t]);
-        const v = this.phasers[t].process(this.drives[t].process(vals[t])) * g;
+        let x = vals[t];
+        if (this.hpOn[t]) {
+          this.hps[t].run(x);
+          x = this.hps[t].hp;
+        }
+        const v = this.phasers[t].process(this.drives[t].process(x)) * g;
         dry += v;
         dIn += v * this.dly[t].next(this.dlyT[t]);
         rIn += v * this.rev[t].next(this.revT[t]);

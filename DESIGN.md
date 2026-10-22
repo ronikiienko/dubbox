@@ -58,11 +58,12 @@ Every voice has **exactly the same** per-note values.
 | *Pitch* (per step) | the sound's frequency, ±12 st | sine pitch (base 50 Hz) | noise HP frequency (base 8 kHz) | ring + click frequency (base 1.4 kHz) | note (relative to Root) |
 | **Tone** | brightness: lowpass on the voice | 4-pole ladder after drive | 2× one-pole LP | 4-pole ladder | ladder cutoff (+ envelope) |
 | **Res** | resonance of the voice's filter | ladder res (boom) | HP resonance (ring) | BP Q (ringy ↔ noisy) | ladder res |
+| **HP** | highpass, 12 dB. Position 0 = off (bypassed), 1–8 = ~30 Hz … 2 kHz | ✓ | ✓ | ✓ | ✓ |
 | **Decay** | length | ✓ | ✓ | ✓ | ✓ |
 | **Dist** | saturation, loudness-matched | ✓ | ✓ | ✓ | ✓ |
 | Phs · Lvl · Dly · Rev | mixer | ✓ | ✓ | ✓ | ✓ |
 
-Row order is Tone, Res, Decay, Dist, Phs, Lvl, Dly, Rev (signal flow), identical on every track.
+Row order is Tone, Res, HP, Decay, Dist, Phs, Lvl, Dly, Rev, identical on every track.
 Copying notes between tracks carries every value by its knob position.
 
 ### Effects (global)
@@ -181,7 +182,7 @@ in ──► [+]──► delayline(time, wow) ──► out
 - Fixed: predelay 20 ms, input HP 200 Hz, stereo out from decorrelated lines.
 
 ### 5.4 Dist (per track)
-- Insert right after the voice: voice → **Dist** → phaser → fader → sends.
+- Insert after the voice and highpass: voice → HP → **Dist** → phaser → fader → sends.
 - `tanh(g·x + b) − tanh(b)`, g = 1 + 30·amount², b = 0.15·amount (slight asymmetry = even harmonics). 0 = bypassed.
 - **Loudness stays the same.** Makeup is computed every block for the *current input level*: the RMS of a sine at that level before vs. after the curve. So it's right from a note's first sample, then a slow (300 ms) RMS correction trims the rest. The input level follower runs even when bypassed. Measured: within ±0.5 dB across all settings for quiet, loud and percussive signals.
 
@@ -192,7 +193,7 @@ in ──► [+]──► delayline(time, wow) ──► out
 
 ### 5.6 Master chain
 ```
-track: voice ─► dist ─► phaser ─► fader ─┬─► sum ─► GLUE ─► TAPE(Age) ─► Volume ─► out
+track: voice ─► hp ─► dist ─► phaser ─► fader ─┬─► sum ─► GLUE ─► TAPE(Age) ─► Volume ─► out
                                  ├─► delay send ─► delay ret ──► sum
                                  └─► reverb send ─► reverb ret ─► sum
 ```
