@@ -5,8 +5,7 @@ A tiny browser groovebox for dub techno and 90s techno. One screen, one 300-bar 
 ### ▶ [Open DUBBOX](https://ronikiienko.github.io/dubbox/)
 
 Runs entirely in the browser (Chrome, Safari, Firefox on desktop). Nothing to install, no account. Your project autosaves in the browser.
-
-<!-- demo video goes here -->
+[Demo](https://github.com/user-attachments/assets/67a7d3b9-a274-40c2-8971-85e9f0ae70e3)
 
 ## Philosophy
 
