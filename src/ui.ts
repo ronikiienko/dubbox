@@ -51,7 +51,8 @@ const RULER_H = 20;
 const SUB_MIN = 6; // value rows are compact (a heat strip) and stretch between these to fill the screen
 const SUB_MAX = 14;
 const HEAT_BELOW = 24;
-const LABEL_COLS = 3; // rows shorter than this draw as heat, taller as bars
+const LABEL_COLS = 3;
+const GROUP_GAP = 8; // breathing room under each track's last row (its name hangs below the row) // rows shorter than this draw as heat, taller as bars
 const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
 const HOT_PAD_TOP = 13; // room for the value numbers
 const HOT_PAD_BOTTOM = 2;
@@ -250,7 +251,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   const padBottom = (ti: number, j: number) => (isHot(ti, j) ? HOT_PAD_BOTTOM : 2);
   /** Bar area of a row: [top y, height] in which 0..1 is drawn. */
   const barSpan = (ti: number, j: number) => rowH(ti, j) - padTop(ti, j) - padBottom(ti, j);
-  const laneH = (ti: number) => subRows(ti).reduce((y, _, j) => y + rowH(ti, j), mainH);
+  const laneH = (ti: number) => subRows(ti).reduce((y, _, j) => y + rowH(ti, j), mainH + GROUP_GAP);
   const laneTop = (ti: number) => {
     let y = RULER_H;
     for (let i = 0; i < ti; i++) y += laneH(i);
@@ -293,8 +294,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const avail = tracksEl.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - RULER_H - 14; // 14: scrollbar
     const rows = TRACKS.reduce((n, _, ti) => n + lockIds(ti).length, 0);
     const lanes = TRACKS.length;
-    const nextSub = clamp(Math.floor((avail - HOT_H - lanes * ROW_MIN) / rows), SUB_MIN, SUB_MAX);
-    const next = clamp(Math.floor((avail - HOT_H - rows * nextSub) / lanes), ROW_MIN, ROW_MAX);
+    const nextSub = clamp(Math.floor((avail - HOT_H - lanes * (ROW_MIN + GROUP_GAP)) / rows), SUB_MIN, SUB_MAX);
+    const next = clamp(Math.floor((avail - HOT_H - rows * nextSub) / lanes) - GROUP_GAP, ROW_MIN, ROW_MAX);
     if (next === mainH && nextSub === subH) return;
     mainH = next;
     subH = nextSub;
@@ -392,6 +393,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
           if (y < rt + rowH(ti, j)) return { si, ti, sub: j, rowTop: rt, ruler: false };
           rt += rowH(ti, j);
         }
+        if (y < top + laneH(ti)) break; // the gap under a track: nothing there
       }
       return { si, ti: -1, sub: -1, rowTop: 0, ruler: false };
     };
@@ -880,6 +882,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
         // names stagger across 3 columns, so each can be taller than its row without touching a neighbour
         el.style.setProperty('--col', String(j % LABEL_COLS));
         el.addEventListener('click', () => openRow({ ti, sub: j }));
+        if (j === lockIds(ti).length - 1) el.style.marginBottom = `${GROUP_GAP}px`;
         headCol.append(el);
         return el;
       });
