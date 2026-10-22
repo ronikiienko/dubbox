@@ -574,7 +574,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     ctx.clearRect(0, 0, w, H);
 
     // ruler: bar numbers + start marker
-    ctx.font = '10px ui-monospace, Menlo, monospace';
+    ctx.font = '12px ui-monospace, Menlo, monospace';
     ctx.textBaseline = 'middle';
     for (let b = Math.floor(first / STEPS_PER_BAR); b * STEPS_PER_BAR <= last; b++) {
       const x = b * STEPS_PER_BAR * CELL - x0;
@@ -593,7 +593,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
     // lanes
     ctx.textAlign = 'center';
-    ctx.font = '9px ui-monospace, Menlo, monospace';
+    ctx.font = '11px ui-monospace, Menlo, monospace';
     for (let ti = 0; ti < TRACKS.length; ti++) {
       const tr = p.tracks[ti];
       const top = laneTop(ti);

@@ -9,7 +9,7 @@
   --red: #e5484d;
   --step: 30px;
   font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text);
   background: var(--bg);
 }
@@ -54,7 +54,7 @@ header {
   align-content: start;
   padding: 0 0 0 14px;
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
+  grid-template-columns: 170px minmax(0, 1fr);
   gap: 14px;
 }
 .col { display: flex; flex-direction: column; }
@@ -64,7 +64,7 @@ header {
 .head.muted .name { opacity: 0.3; }
 .name { font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
 .name:hover { color: var(--accent); }
-.sublabel { flex: none; height: 22px; overflow: hidden; padding-left: 14px; color: var(--dim); font-size: 10px; }
+.sublabel { flex: none; height: 22px; overflow: hidden; padding-left: 14px; color: var(--dim); font-size: 12px; }
 .subname { height: 22px; line-height: 22px; }
 .subdesc { color: var(--dim); line-height: 1.35; padding-right: 6px; opacity: 0; transition: opacity 0.15s; }
 .sublabel.hot .subname { color: var(--accent); }
@@ -95,7 +95,7 @@ header {
   border-radius: 4px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
   color: var(--dim);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.7;
 }
 .help[hidden] { display: none; }
