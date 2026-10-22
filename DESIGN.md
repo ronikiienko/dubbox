@@ -116,8 +116,11 @@ There are **no knobs**. Everything is per note, and the song-wide values are row
 ### 3.3 Defaults in the middle
 Values with a neutral "normal" default sit at the **middle position** (4 of 0–8), so every note can go either way: **Decay** (range centred on the default), **Lvl** (in dB: off, −18, −12, −6, **0**, +3, +6, +9, +12), **Pan** (centre), **LP on BASS/CHORD** (±3 octaves). Values whose natural default is "off" or "open" stay at the edge: HP, Dist, Phs, Dly, Rev, Res, drum LP (fully open).
 
+### 3.7 Spring
+GLOBAL **Spring** (0 = default) crossfades the shared reverb from the room (FDN) to a **spring tank** with an equal-power curve: per side a feedback delay (37 / 43 ms) whose loop runs through 16 first-order allpasses (a = 0.6) for the dispersive "boing" chirp, LP 4.2 kHz, HP 120 Hz, a soft clip for splash when hit hard, slight modulation. Reverb Size sets the spring's feedback too. Level-matched to the room (tank × 0.33).
+
 ### 3.5 GLOBAL lane
-The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swing, Vol, Delay Time / Fbk / Tone, Reverb Size, Tape Age**.
+The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swing, Vol, Delay Time / Fbk / Tone, Reverb Size, Spring, Tape Age**.
 - **No notes to place.** Every step has a value. Expand GLOBAL (click its name) and draw in its rows like any value row: a value set on a step **holds until the next set value**; before the first one, the default. Held stretches are drawn dim, set steps bright (with their value when the row is hot).
 - Double-click a set step = remove it (the previous value holds through). Dice only touches set values (or the hovered step).
 - The GLOBAL lane draws **no note cells**: a thin line with an amber marker wherever a value is set, labelled with what changed (scale name, tempo in bpm, otherwise the value's name). Its open rows draw held values as one continuous fill, not per-step bars.

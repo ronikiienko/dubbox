@@ -53,6 +53,63 @@ export class TapeDelay {
 }
 
 /** 8-line feedback delay network, Householder mix, damped, two lines modulated. */
+/**
+ * Spring tank (one spring per side): a feedback delay whose loop runs through a long chain of
+ * allpasses. The chain delays low frequencies more than high ones, so every echo smears into the
+ * dispersive "boing" chirp; a soft clip in the loop adds the splash when it's hit hard.
+ */
+export class Spring {
+  private static N = 16; // allpasses per spring
+  private static A = 0.6; // allpass coefficient: amount of dispersion
+  private ap = [new Float64Array(Spring.N), new Float64Array(Spring.N)];
+  private lines: DelayLine[];
+  private len: number[];
+  private lp = [new OnePole(), new OnePole()];
+  private hp = [new OnePole(), new OnePole()];
+  private inHp = new OnePole();
+  private lpA: number;
+  private hpA: number;
+  private inHpA: number;
+  private fb = 0.8;
+  private modPh = 0;
+  l = 0;
+  r = 0;
+
+  constructor(private sr: number) {
+    this.len = [0.037 * sr, 0.043 * sr];
+    this.lines = this.len.map((l) => new DelayLine(Math.ceil(l) + 64));
+    this.lpA = lpCoef(4200, sr);
+    this.hpA = lpCoef(120, sr);
+    this.inHpA = lpCoef(150, sr);
+  }
+
+  /** Same Size as the room: longer tail. */
+  set(size: number) {
+    this.fb = 0.72 + 0.2 * size;
+  }
+
+  process(x: number) {
+    const input = this.inHp.hp(x, this.inHpA);
+    this.modPh += 0.9 / this.sr;
+    if (this.modPh >= 1) this.modPh -= 1;
+    const mod = Math.sin(TAU * this.modPh) * 3;
+    const a = Spring.A;
+    for (let c = 0; c < 2; c++) {
+      let y = this.lines[c].read(this.len[c] + (c ? -mod : mod));
+      const st = this.ap[c];
+      for (let i = 0; i < Spring.N; i++) {
+        const out = -a * y + st[i];
+        st[i] = y + a * out;
+        y = out;
+      }
+      y = this.hp[c].hp(this.lp[c].lp(y, this.lpA), this.hpA);
+      this.lines[c].write(input + tanh(y * this.fb * 1.2) / 1.2);
+      if (c) this.r = y;
+      else this.l = y;
+    }
+  }
+}
+
 export class Reverb {
   private static MS = [29.7, 37.1, 41.1, 43.7, 53.3, 59.9, 67.7, 79.3];
   private lines: DelayLine[];

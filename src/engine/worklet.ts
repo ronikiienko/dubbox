@@ -5,7 +5,7 @@ import { GLOBAL, PARAMS, RATCHET, lvlGain, PARAM_BY_ID, SWING, chordIntervals, s
 import { NO_LOCK, audible, type TrackState } from '../state';
 import type { FromEngine, ToEngine } from './bridge';
 import { SVF, Smooth, timeCoef } from './dsp';
-import { Crush, Drive, Glue, Phaser, Reverb, Tape, TapeDelay } from './fx';
+import { Crush, Drive, Glue, Spring, Phaser, Reverb, Tape, TapeDelay } from './fx';
 import { Hat, Kick, Perc, Snare, Synth, type Voice } from './voices';
 
 declare const sampleRate: number;
@@ -17,6 +17,7 @@ declare class AudioWorkletProcessor {
 const N = GLOBAL; // instrument tracks; GLOBAL is the last track and has no voice
 const DELAY_SIXTEENTHS = [1, 2, 3, 4, 6];
 const REC_CHUNK = 8192;
+const SPRING_GAIN = 0.33; // spring tank level vs the room (measured: the tank is ~10 dB hotter)
 
 class Engine extends AudioWorkletProcessor {
   private sr = sampleRate;
@@ -75,6 +76,7 @@ class Engine extends AudioWorkletProcessor {
   // fx + master
   private delay = new TapeDelay(this.sr);
   private reverb = new Reverb(this.sr);
+  private spring = new Spring(this.sr);
   private glue = new Glue(this.sr);
   private tape = new Tape(this.sr);
 
@@ -155,6 +157,7 @@ class Engine extends AudioWorkletProcessor {
     const stepSamples = (this.sr * 60) / R.tempo / 4;
     this.delay.set(DELAY_SIXTEENTHS[R['delay.time']] * stepSamples, R['delay.fbk'], R['delay.tone']);
     this.reverb.set(R['reverb.size']);
+    this.spring.set(R['reverb.size']);
     this.tape.set(R['tape.age']);
   }
 
@@ -346,9 +349,16 @@ class Engine extends AudioWorkletProcessor {
 
       this.delay.process(dIn);
       const dl = this.delay.l, dr = this.delay.r;
-      this.reverb.process(rIn + 0.125 * (dl + dr));
+      const rvIn = rIn + 0.125 * (dl + dr);
+      this.reverb.process(rvIn);
+      this.spring.process(rvIn);
+      // Spring: equal-power crossfade room → spring tank (the spring is level-matched to the room)
+      const sa = (R['reverb.spring'] * Math.PI) / 2;
+      const rc = Math.cos(sa), sc = Math.sin(sa) * SPRING_GAIN;
+      const rvL = this.reverb.l * rc + this.spring.l * sc;
+      const rvR = this.reverb.r * rc + this.spring.r * sc;
 
-      this.glue.process(dryL + dl + this.reverb.l, dryR + dr + this.reverb.r);
+      this.glue.process(dryL + dl + rvL, dryR + dr + rvR);
       this.tape.process(this.glue.l, this.glue.r);
 
       const g = this.vol.next(vol);

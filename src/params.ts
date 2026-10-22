@@ -89,7 +89,7 @@ export const TRACKS: TrackDef[] = [
   // last, so instrument indices (mix ids, keys 1–6) stay put
   {
     name: 'GLOBAL', global: true,
-    voice: ['scale', 'root', 'tempo', 'swing', 'volume', 'delay.time', 'delay.fbk', 'delay.tone', 'reverb.size', 'tape.age'],
+    voice: ['scale', 'root', 'tempo', 'swing', 'volume', 'delay.time', 'delay.fbk', 'delay.tone', 'reverb.size', 'reverb.spring', 'tape.age'],
   },
 ];
 export const GLOBAL = TRACKS.length - 1;
@@ -181,6 +181,7 @@ const DESCRIPTIONS: Record<string, string> = {
   'delay.fbk': 'How long echoes repeat. Top = runaway.',
   'delay.tone': 'Echo colour: darker ↔ thinner each repeat.',
   'reverb.size': 'Room length.',
+  'reverb.spring': 'Reverb character: room ↔ dub spring tank (boing).',
   'tape.age': 'Tape wear: warmth, wobble, hiss.',
   lp: 'Lowpass. Lower = darker, softer.',
   res: 'Filter resonance. Higher = ringing, squelchy.',
@@ -279,6 +280,7 @@ export const PARAMS: ParamDef[] = [
     fmt: (v) => (v < -0.05 ? 'dark ' + Math.round(-v * 100) : v > 0.05 ? 'thin ' + Math.round(v * 100) : 'flat'),
   }),
   p({ id: 'reverb.size', label: 'Reverb size', min: 0, max: 1, def: 0.5, curve: 'lin', fmt: (v) => (1.5 * Math.pow(14 / 1.5, v)).toFixed(1) + ' s' }),
+  p({ id: 'reverb.spring', label: 'Spring', min: 0, max: 1, def: 0, curve: 'lin' }),
   p({ id: 'tape.age', label: 'Tape age', min: 0, max: 1, def: 0.3, curve: 'lin' }),
 ];
 
