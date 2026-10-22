@@ -424,7 +424,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const { si, ti, sub, rowTop, ruler } = hit(e);
       if (ruler || (e.shiftKey && ti >= 0)) {
         canvas.setPointerCapture(e.pointerId);
-        gesture = true;
         selDrag = { ruler, t0: ti, s0: si, ti, moved: false };
         if (!ruler) updateSel(si, ti);
         return;
@@ -442,7 +441,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
       if (sub >= 0) {
         const id = subRows(ti)[sub];
         canvas.setPointerCapture(e.pointerId);
-        gesture = true;
         bars = { ti, sub, id, si0: si, last: si, y: e.clientY, idx0: toIndex(PARAM_BY_ID[id], noteValue(ti, id, si)), rowTop, mode: 'pending' };
         return;
       }
@@ -457,7 +455,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
         return;
       }
       canvas.setPointerCapture(e.pointerId);
-      gesture = true;
       drag = { ti, si0: si, last: si, y: e.clientY, note: tr.note[si], mode: 'pending', paint: (tr.s[si] ? 0 : 1) as StepState };
     });
     canvas.addEventListener('pointermove', (e) => {
@@ -523,7 +520,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
       drag = null;
       bars = null;
       pending = null;
-      gesture = false;
     };
     canvas.addEventListener('pointerleave', () => (hover = null));
     canvas.addEventListener('pointerup', end);
