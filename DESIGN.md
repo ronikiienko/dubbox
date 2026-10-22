@@ -97,14 +97,14 @@ There are **no knobs**. Everything is per note, and the song-wide values are row
 
 ### 3.1 Per-note values (locks)
 - A track's sound is set **only per note**: its instrument values plus Lvl, Dly, Rev, Phs. There are no knobs at all: song-wide values live on the GLOBAL lane (3.5).
-- **Click a track name** to expand it (one at a time). Under its lane, one row per value shows a **bar per note**: bright = this note has its own value, faint = the fixed default.
+- **Click a track name** to expand it (one at a time). Under its lane, one row per value shows a **bar per note**, height = its value. There's no "set vs default" look: every note simply has a value, all bars are one tone. (GLOBAL keeps bright = set here, dim = held from earlier.)
 - Rows come in **groups**, each with its name running vertically down the left and a thin divider (5 px gap) above: **Note** (Ratchet, the voice's own values, Decay) · **Filter** (Lowpass, Resonance, Highpass) · **Color** (Distortion, Bitcrush, Phaser) · **Mix** (Level, Pan) · **Sends** (Delay, Reverb). GLOBAL: **Song** (Scale, Root, Tempo, Swing) · **Delay** · **Reverb** · **Master** (Tape age, Volume). Defined in `rowGroups` (`params.ts`).
 - **Click a row (or its name) to open it** (22 → 80 px, easing ~120 ms): it prints each note's position as a number (0–8, or −4…+4 for Pan) and its label reveals a one-line description. One row open at a time; click it again or Esc to close. The opening click never edits, and a double-click right after it doesn't unset.
 - Drag a bar up/down = set that note's value. Drag across a row = draw values over every note you pass (bar height follows the mouse). Double-click a bar = back to the default.
 - **⇧-drag in an open row = ramp**: a straight line from where you press to the mouse (dashed guide while dragging); every note under it gets its point on the line, snapped to the positions. Moving back un-does the notes you leave. One undo step.
 - **A new note copies the values of the previous note** on its track (or uses the defaults if it's the first). Painting a run carries the current sound forward.
 - Old saves: track knob settings that differ from the default are baked into the notes that used them.
-- Notes with locks get a small dot on the main lane. Deleting a note deletes its locks.
+- A note whose values **differ from the defaults** gets a small dot on the main lane (shaped notes are visible with the track folded). Deleting a note deletes its values. Saved files store only non-default note values.
 - Engine: tracks are mono, so a note's values hold for the track **until the next note**. No interpolation: values change exactly at the note (only the 20 ms anti-click smoothing).
 - **Slide glides everything**: on a slid note, pitch *and* all strip values glide linearly into the next note's values over the step.
 

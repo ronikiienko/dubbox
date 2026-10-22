@@ -74,13 +74,15 @@ function serialize(p: Project): SavedProject {
   return {
     version: 4,
     params: p.params,
-    tracks: p.tracks.map((tr) => {
+    tracks: p.tracks.map((tr, ti) => {
       const hits: Hit[] = [];
       if (tr !== p.tracks[GLOBAL]) for (let i = 0; i < SONG_STEPS; i++) if (tr.s[i]) hits.push(tr.slide[i] ? [i, tr.s[i], tr.note[i], 1] : [i, tr.s[i], tr.note[i]]);
       const locks: Record<string, [number, number][]> = {};
       for (const [id, arr] of Object.entries(tr.locks)) {
         const l: [number, number][] = [];
-        for (let i = 0; i < SONG_STEPS; i++) if (arr[i] !== NO_LOCK) l.push([i, arr[i]]);
+        // notes: a default value isn't stored (it plays the same as unset); GLOBAL: a set value is a change
+        const def = TRACKS[ti].global ? NO_LOCK : toIndex(PARAM_BY_ID[id], PARAM_BY_ID[id].defN);
+        for (let i = 0; i < SONG_STEPS; i++) if (arr[i] !== NO_LOCK && arr[i] !== def) l.push([i, arr[i]]);
         if (l.length) locks[id] = l;
       }
       return { hits, locks, mute: tr.mute, solo: tr.solo };

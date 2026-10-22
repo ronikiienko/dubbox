@@ -77,6 +77,7 @@ const COLORS = {
   text: '#d9d4c7',
   accent: '#e8a33d',
   accentDim: '#6b4d22',
+  bar: '#a39d90', // a note's value bar: one tone, set or default alike
 };
 
 // ---- UI -----------------------------------------------------------------
@@ -409,6 +410,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
     return v === NO_LOCK ? p.params[id] : fromIndex(PARAM_BY_ID[id], v);
   };
 
+  /** A note's value differs from the default (unset, or set to the default, both count as default). */
+  const shaped = (ti: number, id: string, si: number) => {
+    const v = p.tracks[ti].locks[id][si];
+    return v !== NO_LOCK && v !== toIndex(PARAM_BY_ID[id], PARAM_BY_ID[id].defN);
+  };
+
   function timeline(): HTMLElement {
     scroller = h('div', 'scroller');
     spacerEl = h('div', 'spacer');
@@ -626,7 +633,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
 
-    // double-click a bar = remove that note's lock (back to the knob)
+    // double-click a bar = back to the default value
     canvas.addEventListener('dblclick', (e) => {
       const { si, ti, sub } = hit(e);
       if (performance.now() - openedAt < 500) return; // that was the click that opened the row
@@ -764,8 +771,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
           const tw = (CELL - 6) / rat;
           for (let r = 0; r < rat; r++) ctx.fillRect(x + 2 + r * tw, y + hh - 4, Math.max(1, tw - 1), 2);
         }
-        if (ids.some((id) => tr.locks[id][si] !== NO_LOCK)) {
-          // this note has its own values
+        if (ids.some((id) => shaped(ti, id, si))) {
+          // this note differs from the defaults somewhere
           ctx.fillStyle = COLORS.text;
           ctx.fillRect(x + CELL - 7, y + 2, 3, 3);
         }
@@ -807,7 +814,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
           if (g && locked) held = fromIndex(d, arr[si]);
           const n = g ? held : noteValue(ti, id, si);
           const x = si * CELL - x0;
-          ctx.fillStyle = locked ? COLORS.text : COLORS.line;
+          // GLOBAL: set here = bright, held from earlier = dim · notes: every value looks the same
+          ctx.fillStyle = !g ? COLORS.bar : locked ? COLORS.text : COLORS.line;
           if (d.bipolar) {
             // grows up/down from the centre line (e.g. Pan: up = right, down = left)
             const mid = rowTop + pad + span / 2;
@@ -822,7 +830,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
             const idx = toIndex(d, n);
             const half = (d.positions - 1) / 2;
             const label = d.steps ? d.steps[idx] : d.id === 'tempo' ? String(Math.round(toReal(d, n))) : d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
-            ctx.fillStyle = locked ? COLORS.text : COLORS.dim;
+            ctx.fillStyle = !g || locked ? COLORS.text : COLORS.dim;
             ctx.fillText(label, x + CELL / 2, rowTop + 7);
           }
         }
