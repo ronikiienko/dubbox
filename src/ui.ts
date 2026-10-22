@@ -19,11 +19,34 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): 
 
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
 
+const HELP: [string, string][] = [
+  ['space', 'play / stop'],
+  ['F', 'follow playhead'],
+  ['1–6 / ⇧1–6', 'mute / solo'],
+  ['hold Q W E R T Y', 'dub throw'],
+  ['click step', 'on / off'],
+  ['drag sideways', 'paint steps'],
+  ['drag ↕ / wheel on step', 'pitch'],
+  ['⌥-click step', 'slide (synths)'],
+  ['click track name', 'per-note values (GLOBAL: tempo, FX…)'],
+  ['drag in a value row', 'set · across = draw'],
+  ['dbl-click value', 'unset'],
+  ['click ruler', 'play from bar'],
+  ['drag ruler / ⇧-drag', 'select bars / area'],
+  ['⌘C ⌘X ⌘V', 'copy / cut / paste at mouse'],
+  ['⌘D', 'duplicate'],
+  ['delete', 'clear selection'],
+  ['D', 'dice selection / hovered'],
+  ['⌘Z / ⇧⌘Z', 'undo / redo'],
+  ['wheel', 'scroll'],
+];
+
 const THROW_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY'];
 
 // timeline geometry (px)
 const CELL = 22;
-const ROW_H = 52;
+const ROW_MIN = 34; // track lanes stretch between these to fill the screen
+const ROW_MAX = 84;
 const RULER_H = 20;
 const PAD = 9;
 const SUB_H = 22; // per-note bar rows of an expanded track
@@ -60,6 +83,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let follow = true; // keep the playhead in view while playing
   let expanded = -1; // track showing its per-note bar rows
   let resizeObs: ResizeObserver | undefined;
+  let tracksEl: HTMLElement;
+  let mainH = 52; // height of a track's main lane, fitted to the window
   let spacerEl: HTMLElement;
   type RowRef = { ti: number; sub: number } | null;
   let hot: RowRef = null; // bar row drawn tall (the one the mouse rested on)
@@ -220,7 +245,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   const padBottom = (ti: number, j: number) => (isHot(ti, j) ? HOT_PAD_BOTTOM : 2);
   /** Bar area of a row: [top y, height] in which 0..1 is drawn. */
   const barSpan = (ti: number, j: number) => rowH(ti, j) - padTop(ti, j) - padBottom(ti, j);
-  const laneH = (ti: number) => subRows(ti).reduce((y, _, j) => y + rowH(ti, j), ROW_H);
+  const laneH = (ti: number) => subRows(ti).reduce((y, _, j) => y + rowH(ti, j), mainH);
   const laneTop = (ti: number) => {
     let y = RULER_H;
     for (let i = 0; i < ti; i++) y += laneH(i);
@@ -228,7 +253,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   };
   const totalH = () => laneTop(TRACKS.length);
   const subTop = (ti: number, j: number) => {
-    let y = laneTop(ti) + ROW_H;
+    let y = laneTop(ti) + mainH;
     for (let k = 0; k < j; k++) y += rowH(ti, k);
     return y;
   };
@@ -238,6 +263,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
    * when it really changed, and redraws right away so a blank frame never reaches the screen.
    */
   function sizeCanvas() {
+    fitRows();
     const dpr = window.devicePixelRatio || 1;
     const w = scroller.clientWidth, hh = Math.round(totalH());
     const pw = Math.round(w * dpr), ph = Math.round(hh * dpr);
@@ -249,6 +275,21 @@ export function mountUI(root: HTMLElement, initial: Project) {
     canvas.style.height = `${hh}px`;
     canvas.getContext('2d')!.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawTimeline();
+  }
+
+  /**
+   * Lanes share the panel's height, so the whole song fits without scrolling. An expanded track's
+   * rows (and the room a hot row grows into) come off the top first; below ROW_MIN the panel scrolls.
+   */
+  function fitRows() {
+    if (!tracksEl) return;
+    const cs = getComputedStyle(tracksEl);
+    const avail = tracksEl.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - RULER_H - 14; // 14: scrollbar
+    const extra = expanded >= 0 ? lockIds(expanded).length * SUB_H + HOT_H - SUB_H : 0;
+    const next = clamp(Math.floor((avail - extra) / TRACKS.length), ROW_MIN, ROW_MAX);
+    if (next === mainH) return;
+    mainH = next;
+    heads.forEach((el) => (el.style.height = `${mainH}px`));
   }
 
   const sameRow = (a: RowRef, b: RowRef) => a?.ti === b?.ti && a?.sub === b?.sub;
@@ -317,6 +358,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     resizeObs?.disconnect();
     resizeObs = new ResizeObserver(sizeCanvas);
     resizeObs.observe(scroller);
+    resizeObs.observe(tracksEl);
 
     // Manual scrolling (scrollbar, trackpad, wheel) stops follow mode.
     scroller.addEventListener('pointerdown', (e) => e.target === scroller && setFollow(false));
@@ -329,8 +371,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
       if (y < RULER_H) return { si, ti: -1, sub: -1, rowTop: 0, ruler: true };
       for (let ti = 0; ti < TRACKS.length; ti++) {
         const top = laneTop(ti);
-        if (y < top + ROW_H) return { si, ti, sub: -1, rowTop: top, ruler: false };
-        let rt = top + ROW_H;
+        if (y < top + mainH) return { si, ti, sub: -1, rowTop: top, ruler: false };
+        let rt = top + mainH;
         for (let j = 0; j < subRows(ti).length; j++) {
           if (y < rt + rowH(ti, j)) return { si, ti, sub: j, rowTop: rt, ruler: false };
           rt += rowH(ti, j);
@@ -547,7 +589,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const tr = p.tracks[ti];
       const top = laneTop(ti);
       const y = top + PAD;
-      const hh = ROW_H - PAD * 2;
+      const hh = mainH - PAD * 2;
       const ids = lockIds(ti);
       ctx.globalAlpha = audible(p.tracks, ti) ? 1 : 0.3;
       const g = TRACKS[ti].global;
@@ -743,10 +785,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
     // tracks: heads | scrolling timeline
     const tracks = h('main', 'tracks');
+    tracksEl = tracks;
     const headCol = h('div', 'col');
     headCol.append(h('div', 'ruler-gap'));
     TRACKS.forEach((td, ti) => {
       const head = h('div', 'head');
+      head.style.height = `${mainH}px`;
       const name = h('div', 'name', (ti === expanded ? '▾ ' : '▸ ') + td.name);
       name.title = td.global
         ? 'click = show the song-wide values (scale, key, tempo, FX)'
@@ -775,12 +819,15 @@ export function mountUI(root: HTMLElement, initial: Project) {
     tracks.append(headCol, timeline());
 
 
-    const help = h('div', 'help',
-      'space play · 1–6 mute · shift+1–6 solo · hold Q W E R T Y = dub throw · ' +
-      'click step = on/off · drag sideways = paint · drag up/down or wheel on a step = pitch · click track name = sound per note (GLOBAL = scale, key, tempo, FX) · alt-click (bass/chord) = slide · ' +
-      'click ruler = play from bar · drag ruler = select bars · shift-drag = select · ⌘C/X/V copy/cut/paste at mouse · ⌘D duplicate · D dice selection/hovered note · ⌘Z undo · wheel = scroll · F = follow');
+    const help = h('div', 'help');
+    for (const [key, what] of HELP) {
+      const item = h('div');
+      item.append(h('span', 'key', key), what);
+      help.append(item);
+    }
 
     root.append(header, tracks, help);
+    sizeCanvas(); // fit the lanes to the window before the first frame
     p.tracks.forEach((_, i) => renderHead(i));
     scroller.scrollLeft = scrollLeft;
   }

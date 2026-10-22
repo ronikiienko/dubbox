@@ -16,7 +16,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; user-select: none; }
-#app { margin: 24px auto; padding: 0 24px; }
+#app { height: 100vh; padding: 16px 24px; display: flex; flex-direction: column; gap: 10px; }
 
 button {
   font: inherit;
@@ -29,12 +29,13 @@ button {
 button:hover { border-color: var(--dim); }
 
 /* ---- header ---- */
-header, .fx, .tracks {
+header, .tracks {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 4px;
 }
 header {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -49,7 +50,10 @@ header {
 
 /* ---- tracks: heads | timeline | knobs ---- */
 .tracks {
-  margin: 10px 0;
+  flex: 1;
+  min-height: 0; /* shrinks to leave room for the shortcuts; scrolls if lanes can't shrink further */
+  overflow-y: auto;
+  align-content: start;
   padding: 6px 14px;
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
@@ -57,12 +61,12 @@ header {
 }
 .col { display: flex; flex-direction: column; }
 .ruler-gap { height: 20px; }
-.head { height: 52px; display: flex; align-items: center; }
+.head { display: flex; align-items: center; flex: none; }
 .head { justify-content: space-between; }
 .head.muted .name { opacity: 0.3; }
 .name { font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
 .name:hover { color: var(--accent); }
-.sublabel { height: 22px; overflow: hidden; padding-left: 14px; color: var(--dim); font-size: 10px; }
+.sublabel { flex: none; height: 22px; overflow: hidden; padding-left: 14px; color: var(--dim); font-size: 10px; }
 .subname { height: 22px; line-height: 22px; }
 .subdesc { color: var(--dim); line-height: 1.35; padding-right: 6px; opacity: 0; transition: opacity 0.15s; }
 .sublabel.hot .subname { color: var(--accent); }
@@ -78,24 +82,14 @@ header {
 .spacer { position: relative; }
 .scroller canvas { position: sticky; left: 0; display: block; cursor: pointer; touch-action: none; }
 
-/* ---- knobs ---- */
-.knobs { display: flex; gap: 6px; }
-.knob { width: 44px; display: flex; flex-direction: column; align-items: center; cursor: ns-resize; touch-action: none; }
-.knob svg { width: 34px; height: 34px; overflow: visible; }
-.knob path { fill: none; stroke-width: 3; stroke-linecap: round; }
-.knob .track { stroke: #2c2b27; }
-.knob .val { stroke: var(--text); }
-.knob .dot { fill: var(--text); }
-.knob.moving .dot { fill: var(--accent); }
-.knob:hover .val { stroke: var(--accent); }
-.klabel { margin-top: 1px; color: var(--dim); white-space: nowrap; font-size: 10px; }
-.knob:hover .klabel { color: var(--text); }
-
-/* ---- fx ---- */
-.fx { display: flex; padding: 10px 14px; gap: 0; }
-.section { padding: 0 18px; border-left: 1px solid var(--line); }
-.section:first-child { padding-left: 0; border-left: none; }
-.section:last-child { flex: 1; }
-.stitle { color: var(--dim); letter-spacing: 0.15em; margin-bottom: 6px; font-size: 10px; }
-
-.help { margin-top: 10px; color: var(--dim); font-size: 10px; line-height: 1.6; }
+.help {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 2px 18px;
+  padding: 0 14px;
+  color: var(--dim);
+  font-size: 10px;
+  line-height: 1.7;
+}
+.help .key { color: var(--text); margin-right: 8px; }
