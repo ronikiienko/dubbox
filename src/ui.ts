@@ -640,21 +640,28 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const rowTop = subTop(ti, j);
         const height = rowH(ti, j);
         if (height < HEAT_BELOW) {
+          // compact: a tiny bar chart of the actual values (≈1 px per position), so sweeps and throws show as shapes
           const arr = tr.locks[id];
+          const span = height - 2;
+          const base = rowTop + height - 1;
           let held = g ? noteValue(ti, id, first) : 0;
           for (let si = first; si <= last; si++) {
             if (!tr.s[si]) continue;
-            if (g && arr[si] !== NO_LOCK) held = fromIndex(d, arr[si]);
+            const own = arr[si] !== NO_LOCK;
+            if (g && own) held = fromIndex(d, arr[si]);
             const n = g ? held : noteValue(ti, id, si);
-            const dv = n - d.defN;
-            const room = dv > 0 ? 1 - d.defN : d.defN;
-            const k = room > 0 ? Math.min(1, Math.abs(dv) / room) : 0;
-            // warm = above the default, cool = below, brighter = further; untouched = faint
-            ctx.fillStyle = k < 0.01 ? COLORS.cell : dv > 0 ? `rgba(232, 163, 61, ${0.25 + 0.75 * k})` : `rgba(110, 160, 230, ${0.25 + 0.75 * k})`;
             const x = si * CELL - x0;
-            // GLOBAL values run on, so their cells join up
-            if (g) ctx.fillRect(x, rowTop + 1, CELL, height - 1);
-            else ctx.fillRect(x + 2, rowTop + 1, CELL - 4, height - 1);
+            ctx.fillStyle = own || g ? 'rgba(230, 223, 204, 0.75)' : COLORS.line;
+            // GLOBAL values run on, so their bars join into a stepped line
+            const bx = g ? x : x + 3, bw = g ? CELL : CELL - 6;
+            if (d.bipolar) {
+              const mid = rowTop + 1 + span / 2;
+              const bh = Math.max(1, Math.abs(n - 0.5) * span);
+              ctx.fillRect(bx, n >= 0.5 ? mid - bh : mid, bw, bh);
+            } else {
+              const bh = Math.max(1, n * span);
+              ctx.fillRect(bx, base - bh, bw, bh);
+            }
           }
           return;
         }
