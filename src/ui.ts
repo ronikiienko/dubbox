@@ -55,17 +55,20 @@ const LABEL_COLS = 3; // rows shorter than this draw as heat, taller as bars
 const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
 const HOT_PAD_TOP = 13; // room for the value numbers
 const HOT_PAD_BOTTOM = 2;
-const PANEL_BG = '#151513';
+const PANEL_BG = '#191816';
 const COLORS = {
-  bg: '#0d0d0c',
-  cell: '#1f1e1b',
-  beat: '#292824',
-  line: '#3a3833',
-  dim: '#5d5a53',
-  text: '#d9d4c7',
-  accent: '#e8a33d',
-  accentDim: '#6b4d22',
+  bg: '#0b0a09',
+  cell: '#11100e', // recessed step
+  beat: '#171613',
+  line: '#2c2a25',
+  dim: '#6d675b',
+  text: '#e6dfcc',
+  accent: '#f0a032', // amber LED
+  accentDim: '#6e4a1d',
+  hit: '#ffd88a', // a step lighting up as the playhead passes
+  playhead: '#ff6a2b',
 };
+const DISPLAY_FONT = "'DIN Condensed', 'Avenir Next Condensed', 'Arial Narrow', sans-serif";
 
 // ---- UI -----------------------------------------------------------------
 
@@ -578,7 +581,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
     // lanes
     ctx.textAlign = 'center';
-    ctx.font = '9px ui-monospace, Menlo, monospace';
+    ctx.font = `bold 12px ${DISPLAY_FONT}`;
     for (let ti = 0; ti < TRACKS.length; ti++) {
       const tr = p.tracks[ti];
       const top = laneTop(ti);
@@ -596,6 +599,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
         ctx.fillStyle = st ? COLORS.accentDim : si % 4 === 0 ? COLORS.beat : COLORS.cell;
         ctx.fillRect(x, y, CELL - 2, hh);
         if (!st) continue;
+        // an LED strip along the top of every note; the note under the playhead lights up whole
+        const now = t.playing && Math.floor(t.phase) === si && !g;
+        ctx.fillStyle = now ? COLORS.hit : COLORS.accent;
+        if (now) ctx.fillRect(x, y, CELL - 2, hh);
+        else ctx.fillRect(x, y, CELL - 2, 2);
         if (g) {
           ctx.fillStyle = COLORS.text;
           const sc = tr.locks.scale[si];
@@ -689,7 +697,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const ry = rulerY();
     ctx.fillStyle = PANEL_BG;
     ctx.fillRect(0, ry, w, RULER_H);
-    ctx.font = '10px ui-monospace, Menlo, monospace';
+    ctx.font = `bold 13px ${DISPLAY_FONT}`;
     ctx.textBaseline = 'middle';
     for (let b = Math.floor(first / STEPS_PER_BAR); b * STEPS_PER_BAR <= last; b++) {
       const x = b * STEPS_PER_BAR * CELL - x0;
@@ -730,8 +738,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
     // playhead
     if (t.playing || t.phase !== startStep) {
-      ctx.fillStyle = COLORS.text;
+      ctx.fillStyle = COLORS.playhead;
+      ctx.shadowColor = COLORS.playhead;
+      ctx.shadowBlur = 8;
       ctx.fillRect(t.phase * CELL - x0, 0, 2, H);
+      ctx.shadowBlur = 0;
     }
   }
 
@@ -748,7 +759,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
       send({ t: 'play', on, from: startStep });
     }
     playBtn.classList.toggle('lit', on);
-    playBtn.textContent = on ? '■ STOP' : '▶ PLAY';
+    playBtn.textContent = on ? 'STOP' : 'PLAY';
+    document.body.classList.toggle('playing', on); // spins the record
   }
 
   function setRec(on: boolean) {
@@ -757,7 +769,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     if (on) startEngine(() => p).then(() => send({ t: 'rec', on: t.rec }));
     else send({ t: 'rec', on });
     recBtn.classList.toggle('lit', on);
-    if (!on) recBtn.textContent = '● REC';
+    if (!on) recBtn.textContent = 'REC';
   }
 
   function setThrow(i: number, on: boolean) {
@@ -781,6 +793,14 @@ export function mountUI(root: HTMLElement, initial: Project) {
     helpBtn.classList.toggle('lit', on);
   }
 
+  function logo() {
+    const el = h('div', 'logo');
+    const word = h('div', 'wordmark');
+    word.append(h('b', '', 'DUBBOX'), h('small', '', '33⅓ RPM · STEREO · DUB TECHNIQUE'));
+    el.append(h('div', 'vinyl'), word);
+    return el;
+  }
+
   function build() {
     const scrollLeft = scroller?.scrollLeft ?? 0;
     heads = [];
@@ -792,8 +812,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
     // header
     const header = h('header');
-    playBtn = button('▶ PLAY', 'btn', () => setPlaying(!t.playing));
-    recBtn = button('● REC', 'btn rec', () => setRec(!t.rec));
+    playBtn = button(t.playing ? 'STOP' : 'PLAY', 'btn led', () => setPlaying(!t.playing));
+    playBtn.classList.toggle('lit', t.playing);
+    recBtn = button('REC', 'btn rec led', () => setRec(!t.rec));
     followBtn = button('FOLLOW', 'btn small lit', () => setFollow(!follow));
     followBtn.title = 'keep the playhead in view (F)';
     const file = h('input');
@@ -809,7 +830,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       build();
     });
     header.append(
-      h('div', 'logo', 'DUBBOX'),
+      logo(),
       playBtn, recBtn, followBtn,
       h('div', 'spacer'),
       helpBtn = button('?', 'btn small help-btn', () => setHelp(!helpOpen)),
@@ -892,7 +913,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
     if (t.rec) {
       const s = Math.floor((now - t.recStart) / 1000);
-      recBtn.textContent = `● ${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+      recBtn.textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
     }
     requestAnimationFrame(frame);
   }
