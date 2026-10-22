@@ -10,21 +10,11 @@ Runs entirely in the browser (Chrome, Safari, Firefox on desktop). Nothing to in
 
 ## Philosophy
 
-**Music that moves.** In most DAWs change is an afterthought: you write a loop, then fight automation lanes to make it evolve, and usually you don't bother. Here **every note carries its own sound**: filter, decay, distortion, pan, sends. Shaping the sound is the same act as writing the notes, so tracks come out alive by default.
+DUBBOX came from feeling overwhelmed by everything a DAW like FL Studio puts in front of you.
 
-**Gestures, not chores.** Setting the same value on twenty notes one by one is busywork. Draw across notes, ⇧-drag a ramp, dice a selection: one move changes many notes.
+FL Studio's automation is super flexible, but I wanted something more accessible. So here almost everything is **per note**: each note carries its own filter, decay, distortion, pan, sends and so on. Changing the sound over time is part of writing the notes, not a separate automation job.
 
-**Snap everything.** Values have a few fixed positions (mostly 9), the grid is 16ths only, there's no velocity. Fewer choices, each one audible. You decide faster and stop fiddling.
-
-**One screen, one place per thing.** No menus, dialogs, plugin windows or mixer pages. Everything is visible, and every parameter lives in exactly one place.
-
-**Fixed structure.** Seven tracks, one 300-bar song. The limits are the point: they push you to make something instead of configuring something.
-
-**Character baked in, genre not.** Analog drift, tape, saturation and glue are always on and tuned, so it sounds good from the first note. But there are no presets and no ready-made patterns. The music is yours, not made for you.
-
-**Perform it.** Throws, mutes, loops, then REC. Play the song like a dub engineer at the desk, record it, done.
-
-**When in doubt, leave it out.**
+The rest is simplified the same way. There's no piano roll, and I tried to add only what's necessary. With fewer options, you have to turn on your creativity instead of searching through features.
 
 ## What it is
 
