@@ -16,7 +16,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; user-select: none; }
-#app { height: 100vh; padding: 16px 24px; display: flex; flex-direction: column; gap: 10px; }
+#app { height: 100vh; display: flex; flex-direction: column; }
 
 button {
   font: inherit;
@@ -29,17 +29,14 @@ button {
 button:hover { border-color: var(--dim); }
 
 /* ---- header ---- */
-header, .tracks {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-}
+/* no boxes: a flat top bar over an edge-to-edge timeline */
+header { background: var(--panel); border-bottom: 1px solid var(--line); }
 header {
   flex: none;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 14px;
+  padding: 6px 14px;
 }
 .logo { font-weight: 700; letter-spacing: 0.25em; color: var(--accent); margin-right: 8px; }
 .spacer { flex: 1; }
@@ -54,7 +51,7 @@ header {
   min-height: 0; /* shrinks to leave room for the shortcuts; scrolls if lanes can't shrink further */
   overflow-y: auto;
   align-content: start;
-  padding: 6px 14px;
+  padding: 0 0 0 14px;
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
   gap: 14px;
@@ -84,8 +81,8 @@ header {
 
 .help {
   position: fixed;
-  right: 24px;
-  top: 64px;
+  right: 14px;
+  top: 44px;
   z-index: 10;
   width: min(640px, calc(100vw - 48px));
   display: grid;
