@@ -1,7 +1,7 @@
 // The whole engine: clock, sequencer, voices, mixer, FX, master.
 // Runs on the audio thread. Talks to the UI only through `port` (see bridge.ts).
 
-import { DEFAULT_SCALE, PARAMS, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
+import { GLOBAL, PARAMS, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
 import { NO_LOCK, audible, type TrackState } from '../state';
 import type { FromEngine, ToEngine } from './bridge';
 import { SVF, Smooth, timeCoef } from './dsp';
@@ -14,8 +14,7 @@ declare class AudioWorkletProcessor {
   readonly port: MessagePort;
 }
 
-const N = TRACKS.length;
-const CHORD = TRACKS.findIndex((t) => t.name === 'CHORD');
+const N = GLOBAL; // instrument tracks; GLOBAL is the last track and has no voice
 const DELAY_SIXTEENTHS = [1, 2, 3, 4, 6];
 const REC_CHUNK = 8192;
 
@@ -30,6 +29,8 @@ class Engine extends AudioWorkletProcessor {
 
   // per-note locks: each track plays with the values of its current note
   private lockDefs = TRACKS.map((_, i) => lockIds(i).map((id) => PARAM_BY_ID[id]));
+  private globalDefs = lockIds(GLOBAL).map((id) => PARAM_BY_ID[id]);
+  private gv: Record<string, number> = {}; // GLOBAL values in force now (normalized)
   private curK = new Int32Array(N).fill(-1); // step of the note now sounding, -1 = none yet
   private glideOn = new Array<boolean>(N).fill(false); // slid note: values glide into the next note
 
@@ -98,6 +99,7 @@ class Engine extends AudioWorkletProcessor {
         Object.assign(this.norm, m.project.params);
         this.tracks = m.project.tracks;
         this.total = this.tracks[0].s.length;
+        this.resolveGlobal(this.nextK - 1);
         break;
       case 'param':
         this.norm[m.id] = m.v;
@@ -109,6 +111,7 @@ class Engine extends AudioWorkletProcessor {
         break;
       case 'lock':
         this.tracks[m.i].locks[m.id][m.si] = m.v;
+        if (m.i === GLOBAL) this.resolveGlobal(this.nextK - 1);
         break;
       case 'flags':
         this.tracks[m.i].mute = m.mute;
@@ -125,6 +128,7 @@ class Engine extends AudioWorkletProcessor {
         this.glideOn.fill(false);
         this.phase = m.from;
         this.nextK = Math.ceil(m.from);
+        this.resolveGlobal(this.nextK - 1);
         break;
       case 'rec':
         if (!m.on && this.recOn) this.flushRec(true);
@@ -137,12 +141,30 @@ class Engine extends AudioWorkletProcessor {
   /** Normalized → snapped → real units. Once per block. */
   private updateParams() {
     for (const d of PARAMS) this.R[d.id] = toReal(d, snap(d, this.norm[d.id]));
+    this.applyGlobal();
     for (let t = 0; t < N; t++) this.applyTrack(t);
     const R = this.R;
     const stepSamples = (this.sr * 60) / R.tempo / 4;
     this.delay.set(DELAY_SIXTEENTHS[R['delay.time']] * stepSamples, R['delay.fbk'], R['delay.tone']);
     this.reverb.set(R['reverb.size']);
     this.tape.set(R['tape.age']);
+  }
+
+  /** GLOBAL values in force at step k: each one's latest set value at or before k, else its default. */
+  private resolveGlobal(k: number) {
+    const locks = this.tracks[GLOBAL]?.locks;
+    if (!locks) return;
+    for (const d of this.globalDefs) {
+      const arr = locks[d.id];
+      let j = Math.min(k, this.total - 1);
+      while (j >= 0 && arr[j] === NO_LOCK) j--;
+      this.gv[d.id] = j >= 0 ? fromIndex(d, arr[j]) : snap(d, this.norm[d.id]);
+    }
+    this.applyGlobal();
+  }
+
+  private applyGlobal() {
+    for (const d of this.globalDefs) if (d.id in this.gv) this.R[d.id] = toReal(d, this.gv[d.id]);
   }
 
   /** Locked value of param `d` at step k, or the knob's value. Normalized. */
@@ -185,18 +207,16 @@ class Engine extends AudioWorkletProcessor {
 
   private iv = new Float64Array(4);
 
-  /** The scale at step k: set by the latest CHORD note, minor if there is none yet. */
-  private scaleAt(k: number): number {
-    const tr = this.tracks[CHORD];
-    for (let j = k; j >= 0; j--) {
-      if (!tr.s[j]) continue;
-      const v = tr.locks['chord.scale'][j];
-      return v === NO_LOCK ? DEFAULT_SCALE : v;
-    }
-    return DEFAULT_SCALE;
-  }
-
   private triggerStep(k: number) {
+    // GLOBAL values set on this step take over first, so this step's notes already use them
+    let changed = false;
+    for (const d of this.globalDefs) {
+      const v = this.tracks[GLOBAL].locks[d.id][k];
+      if (v === NO_LOCK) continue;
+      this.gv[d.id] = fromIndex(d, v);
+      changed = true;
+    }
+    if (changed) this.applyGlobal();
     for (let t = 0; t < N; t++) {
       const tr = this.tracks[t];
       const v = this.voices[t];
@@ -216,7 +236,7 @@ class Engine extends AudioWorkletProcessor {
         let semi = 0;
         const iv = v === this.chord ? this.iv : undefined;
         if (s) {
-          const scale = this.scaleAt(k);
+          const scale = this.R.scale;
           semi = stepToSemi(scale, tr.note[k]);
           if (iv) chordIntervals(scale, this.R['chord.size'], tr.note[k], iv);
         }
@@ -262,6 +282,7 @@ class Engine extends AudioWorkletProcessor {
           // song end: loop to the top
           this.phase -= this.total;
           this.nextK = 0;
+          this.resolveGlobal(-1);
         }
       }
 

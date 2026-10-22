@@ -44,7 +44,7 @@ export function copy(p: Project, r: Region): Clip {
 export function clear(p: Project, r: Region) {
   for (let ti = r.t0; ti <= r.t1; ti++) {
     const tr = p.tracks[ti];
-    tr.s.fill(0, r.s0, r.s1);
+    if (!TRACKS[ti].global) tr.s.fill(0, r.s0, r.s1); // GLOBAL has a value on every step
     tr.note.fill(0, r.s0, r.s1);
     tr.slide.fill(0, r.s0, r.s1);
     for (const a of Object.values(tr.locks)) a.fill(NO_LOCK, r.s0, r.s1);
@@ -65,9 +65,11 @@ export function paste(p: Project, clip: Clip, t0: number, s0: number): Region {
   clip.tracks.forEach((ct, k) => {
     const ti = t0 + k;
     if (ti >= TRACKS.length) return;
+    // GLOBAL values only paste onto GLOBAL, and notes never onto it
+    if (!TRACKS[ti].global !== !TRACKS[ct.src].global) return;
     t1 = ti;
     const tr = p.tracks[ti];
-    tr.s.set(ct.s.subarray(0, len), s0);
+    if (!TRACKS[ti].global) tr.s.set(ct.s.subarray(0, len), s0);
     // drums count semitones (±12), synths scale steps (±7)
     const r = pitchRange(ti);
     for (let i = 0; i < len; i++) tr.note[s0 + i] = Math.max(-r, Math.min(r, ct.note[i]));

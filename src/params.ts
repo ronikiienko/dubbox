@@ -73,6 +73,7 @@ function p(s: Spec): ParamDef {
 export interface TrackDef {
   name: string;
   slide?: boolean; // supports 303-style slide (synths)
+  global?: boolean; // GLOBAL: no notes, a value on every step (a set value holds until the next one)
   voice: string[];
 }
 
@@ -82,14 +83,20 @@ export const TRACKS: TrackDef[] = [
   { name: 'HAT', voice: ['hat.lp', 'hat.res', 'hat.hp', 'hat.decay'] },
   { name: 'PERC', voice: ['perc.lp', 'perc.res', 'perc.hp', 'perc.decay'] },
   { name: 'BASS', slide: true, voice: ['bass.lp', 'bass.res', 'bass.hp', 'bass.decay'] },
-  { name: 'CHORD', slide: true, voice: ['chord.scale', 'chord.size', 'chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
+  { name: 'CHORD', slide: true, voice: ['chord.size', 'chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
   { name: 'MELODY', slide: true, voice: ['mel.lp', 'mel.res', 'mel.hp', 'mel.decay'] },
+  // last, so instrument indices (mix ids, keys 1–6) stay put
+  {
+    name: 'GLOBAL', global: true,
+    voice: ['scale', 'root', 'tempo', 'swing', 'volume', 'delay.time', 'delay.fbk', 'delay.tone', 'reverb.size', 'tape.age'],
+  },
 ];
+export const GLOBAL = TRACKS.length - 1;
 
 export const mixId = (i: number, k: 'dst' | 'phs' | 'lvl' | 'pan' | 'dly' | 'rev') => `mix.${i}.${k}`;
 
 /** A track's per-note values, in signal-flow order: voice → Dist → Phs → Lvl → Pan, plus sends. */
-export const lockIds = (i: number) => [
+export const lockIds = (i: number) => TRACKS[i].global ? TRACKS[i].voice : [
   ...TRACKS[i].voice,
   mixId(i, 'dst'), mixId(i, 'phs'), mixId(i, 'lvl'), mixId(i, 'pan'), mixId(i, 'dly'), mixId(i, 'rev'),
 ];
@@ -110,7 +117,7 @@ export const DEFAULT_SCALE = 2;
 export const SIZES = ['oct', '5th', 'tri', '7th', '9th'];
 
 /** Pitch range per track: synths count scale steps (±7 = an octave), drums semitones. */
-export const pitchRange = (i: number) => (TRACKS[i].slide ? 7 : 12);
+export const pitchRange = (i: number) => (TRACKS[i].global ? 0 : TRACKS[i].slide ? 7 : 12);
 
 /** Scale step (any integer, 7 per octave) → semitones above Root. */
 export function stepToSemi(scale: number, step: number): number {
@@ -137,8 +144,17 @@ export function chordIntervals(scale: number, size: number, step: number, out: F
 
 /** One-line explanations of the per-note values, shown when a value row is expanded. */
 const DESCRIPTIONS: Record<string, string> = {
-  scale: 'Scale from here on, dark → bright. BASS and MELODY follow it too.',
-  size: 'Chord size: octave, 5th, triad, 7th, 9th. Voiced automatically.',
+  'chord.size': 'Chord size: octave, 5th, triad, 7th, 9th. Voiced automatically.',
+  scale: 'Scale of BASS, CHORD, MELODY, dark → bright.',
+  root: 'Key: the note every scale starts on.',
+  tempo: 'Beats per minute.',
+  swing: 'Delays every second 16th.',
+  volume: 'Master volume.',
+  'delay.time': 'Echo time, in 16ths.',
+  'delay.fbk': 'How long echoes repeat. Top = runaway.',
+  'delay.tone': 'Echo colour: darker ↔ thinner each repeat.',
+  'reverb.size': 'Room length.',
+  'tape.age': 'Tape wear: warmth, wobble, hiss.',
   lp: 'Lowpass. Lower = darker, softer.',
   res: 'Filter resonance. Higher = ringing, squelchy.',
   hp: 'Highpass. Cuts the low end. 0 = off.',
@@ -150,7 +166,7 @@ const DESCRIPTIONS: Record<string, string> = {
   dly: 'Send to the tape delay (shared echo).',
   rev: 'Send to the reverb (shared room).',
 };
-export const describe = (id: string) => DESCRIPTIONS[id.slice(id.lastIndexOf('.') + 1)] ?? '';
+export const describe = (id: string) => DESCRIPTIONS[id] ?? DESCRIPTIONS[id.slice(id.lastIndexOf('.') + 1)] ?? '';
 
 /** HP range per voice, so every position actually cuts into that instrument (hats live above 8 kHz). */
 const HP_RANGE: Record<string, [number, number]> = {
@@ -188,6 +204,7 @@ export const PARAMS: ParamDef[] = [
   // global
   p({ id: 'tempo', label: 'Tempo', min: 60, max: 160, def: 122, curve: 'lin', positions: 101, fmt: (v) => Math.round(v) + ' bpm' }),
   p({ id: 'swing', label: 'Swing', min: 0, max: 5, def: 1, curve: 'step', steps: SWING.map((v) => v + '%') }),
+  p({ id: 'scale', label: 'Scale', min: 0, max: 6, def: DEFAULT_SCALE, curve: 'step', steps: SCALES.map((c) => c[0]) }),
   p({ id: 'root', label: 'Root', min: 0, max: 11, def: 5, curve: 'step', steps: NOTES }),
   p({ id: 'volume', label: 'Vol', min: 0, max: 1, def: 0.8, curve: 'lin' }),
 
@@ -197,7 +214,6 @@ export const PARAMS: ParamDef[] = [
   ...core('hat', [2000, 16000, 16000], 0, around(0.06, 8)),
   ...core('perc', [500, 12000, 12000], 0.25, around(0.12, 4)),
   ...synthParams('bass', 220, 0.25),
-  p({ id: 'chord.scale', label: 'Scale', min: 0, max: 6, def: DEFAULT_SCALE, curve: 'step', steps: SCALES.map((c) => c[0]) }),
   p({ id: 'chord.size', label: 'Size', min: 0, max: 4, def: 3, curve: 'step', steps: SIZES }),
   ...synthParams('chord', 600, 0.35),
   ...synthParams('mel', 1500, 0.3),

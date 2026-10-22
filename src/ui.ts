@@ -1,4 +1,4 @@
-import { PARAM_BY_ID, TRACKS, describe, pitchRange, formatParam, fromIndex, lockIds, mixId, snap, toIndex, toReal } from './params';
+import { GLOBAL, PARAM_BY_ID, TRACKS, describe, pitchRange, fromIndex, lockIds, toIndex, toReal } from './params';
 import {
   SONG_STEPS, STEPS_PER_BAR,
   type Project, type StepState, NO_LOCK, audible,
@@ -18,16 +18,6 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): 
 }
 
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
-
-// Knob arc: 270° sweep, angle measured clockwise from 12 o'clock.
-const R = 15, C = 20;
-const angle = (n: number) => ((-135 + 270 * n) * Math.PI) / 180;
-const pt = (n: number) => [C + R * Math.sin(angle(n)), C - R * Math.cos(angle(n))];
-function arc(from: number, to: number): string {
-  if (to - from < 0.002) return '';
-  const [x0, y0] = pt(from), [x1, y1] = pt(to);
-  return `M${x0},${y0} A${R},${R} 0 ${(to - from) * 270 > 180 ? 1 : 0} 1 ${x1},${y1}`;
-}
 
 const THROW_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY'];
 
@@ -54,16 +44,6 @@ const COLORS = {
 
 // ---- UI -----------------------------------------------------------------
 
-interface KnobView {
-  id: string;
-  el: HTMLElement;
-  val: SVGPathElement;
-  dot: SVGCircleElement;
-  label: HTMLElement;
-  hover: boolean;
-  active: boolean;
-}
-
 export function mountUI(root: HTMLElement, initial: Project) {
   let p = initial;
 
@@ -72,7 +52,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
   const recorder = new Recorder();
   const throws = new Set<number>();
 
-  let knobs: KnobView[] = [];
   let heads: HTMLElement[] = [];
   let names: HTMLElement[] = [];
   let playBtn: HTMLButtonElement, recBtn: HTMLButtonElement, followBtn: HTMLButtonElement;
@@ -98,72 +77,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
   const undoStack: Snapshot[] = [];
   let redoStack: Snapshot[] = [];
   let pending: Snapshot | null = null; // taken at gesture start, committed on its first real change
-
-  // Value the engine hears right now: the knob value, overridden by dub throws.
-  function live(id: string): number {
-    if (throws.size && [...throws].some((i) => mixId(i, 'dly') === id)) return 1;
-    return p.params[id];
-  }
-
-  function setParam(id: string, n: number) {
-    p.params[id] = n;
-    send({ t: 'param', id, v: n });
-    scheduleSave(p);
-  }
-
-  // ---- knob -------------------------------------------------------------
-
-  function knob(id: string): HTMLElement {
-    const def = PARAM_BY_ID[id];
-    const el = h('div', 'knob');
-    el.innerHTML =
-      `<svg viewBox="0 0 40 40"><path class="track" d="${arc(0, 1)}"/><path class="val"/>` +
-      `<circle class="dot" r="2.6"/></svg><div class="klabel"></div>`;
-    const kv: KnobView = {
-      id, el,
-      val: el.querySelector('.val')!,
-      dot: el.querySelector('.dot')!,
-      label: el.querySelector('.klabel')!,
-      hover: false,
-      active: false,
-    };
-    knobs.push(kv);
-
-    let lastY = 0, n = 0;
-    el.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
-      el.setPointerCapture(e.pointerId);
-      lastY = e.clientY;
-      kv.active = true;
-      n = p.params[id];
-    });
-    el.addEventListener('pointermove', (e) => {
-      if (!kv.active) return;
-      n = clamp(n + (lastY - e.clientY) / (e.shiftKey ? 900 : 180));
-      lastY = e.clientY;
-      setParam(id, snap(def, n));
-    });
-    const end = () => (kv.active = false);
-    el.addEventListener('pointerup', end);
-    el.addEventListener('pointercancel', end);
-    el.addEventListener('dblclick', () => setParam(id, def.defN));
-    el.addEventListener('pointerenter', () => (kv.hover = true));
-    el.addEventListener('pointerleave', () => (kv.hover = false));
-    el.title = `${def.label} · drag (shift = fine) · dbl-click reset`;
-    return el;
-  }
-
-  function renderKnob(kv: KnobView) {
-    const def = PARAM_BY_ID[kv.id];
-    const base = p.params[kv.id];
-    const v = live(kv.id);
-    kv.val.setAttribute('d', def.bipolar ? arc(Math.min(base, 0.5), Math.max(base, 0.5)) : arc(0, base));
-    const [x, y] = pt(v);
-    kv.dot.setAttribute('cx', String(x));
-    kv.dot.setAttribute('cy', String(y));
-    kv.el.classList.toggle('moving', v !== base);
-    kv.label.textContent = kv.hover || kv.active ? formatParam(def, v) : def.label;
-  }
 
   // ---- timeline ---------------------------------------------------------
   // One canvas for all lanes, virtualized: only the visible steps are drawn.
@@ -191,6 +104,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   function renderHead(ti: number) {
     const tr = p.tracks[ti];
+    if (TRACKS[ti].global) return;
     heads[ti].classList.toggle('muted', !audible(p.tracks, ti));
     heads[ti].querySelector('.solo')!.classList.toggle('lit', tr.solo);
     heads[ti].querySelector('.mute')!.classList.toggle('lit', tr.mute);
@@ -277,9 +191,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
       for (let ti = region.t0; ti <= region.t1; ti++) {
         const tr = p.tracks[ti];
         const ids = onlyRow ? lockIds(ti).filter((id) => id === onlyRow) : lockIds(ti);
+        const single = region.s1 - region.s0 === 1;
         for (let si = region.s0; si < region.s1; si++) {
           if (!tr.s[si]) continue;
           for (const id of ids) {
+            if (TRACKS[ti].global && !single && tr.locks[id][si] === NO_LOCK) continue;
             const d = PARAM_BY_ID[id];
             const step = Math.floor(Math.random() * 3) - 1;
             tr.locks[id][si] = clamp(toIndex(d, noteValue(ti, id, si)) + step, 0, d.positions - 1);
@@ -377,9 +293,15 @@ export function mountUI(root: HTMLElement, initial: Project) {
     for (const id of lockIds(ti)) setLock(ti, id, si, tr.locks[id][j]);
   }
 
-  /** Normalized value a note plays with for `id`: its lock, else the default. */
+  /**
+   * Normalized value a note plays with for `id`: its lock, else the default.
+   * GLOBAL has no notes: a set value holds until the next set one.
+   */
   const noteValue = (ti: number, id: string, si: number) => {
-    const v = p.tracks[ti].locks[id][si];
+    const arr = p.tracks[ti].locks[id];
+    let j = si;
+    if (TRACKS[ti].global) while (j > 0 && arr[j] === NO_LOCK) j--;
+    const v = j >= 0 ? arr[j] : NO_LOCK;
     return v === NO_LOCK ? p.params[id] : fromIndex(PARAM_BY_ID[id], v);
   };
 
@@ -463,6 +385,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
         canvas.setPointerCapture(e.pointerId);
         gesture = true;
         bars = { ti, sub, id, si0: si, last: si, y: e.clientY, idx0: toIndex(PARAM_BY_ID[id], noteValue(ti, id, si)), rowTop, mode: 'pending' };
+        return;
+      }
+      if (TRACKS[ti].global) {
+        // no notes on GLOBAL: its values are edited in its rows
+        pending = null;
         return;
       }
       if (e.altKey) {
@@ -570,7 +497,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       if (vertical && e.target === canvas) {
         const { si, ti, sub } = hit(e);
         const tr = ti >= 0 ? p.tracks[ti] : null;
-        if (tr && sub < 0 && tr.s[si]) {
+        if (tr && sub < 0 && tr.s[si] && !TRACKS[ti].global) {
           e.preventDefault();
           setStep(ti, si, tr.s[si] as StepState, clamp(tr.note[si] + (e.deltaY < 0 ? 1 : -1), -pitchRange(ti), pitchRange(ti)));
           return;
@@ -623,12 +550,22 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const hh = ROW_H - PAD * 2;
       const ids = lockIds(ti);
       ctx.globalAlpha = audible(p.tracks, ti) ? 1 : 0.3;
+      const g = TRACKS[ti].global;
       for (let si = first; si <= last; si++) {
-        const st = tr.s[si];
+        // GLOBAL: highlight the steps where a value changes, named by the scale if that's one of them
+        const set = ids.some((id) => tr.locks[id][si] !== NO_LOCK);
+        const st = g ? set : tr.s[si];
         const x = si * CELL - x0 + 1;
         ctx.fillStyle = st ? COLORS.accentDim : si % 4 === 0 ? COLORS.beat : COLORS.cell;
         ctx.fillRect(x, y, CELL - 2, hh);
         if (!st) continue;
+        if (g) {
+          ctx.fillStyle = COLORS.text;
+          const sc = tr.locks.scale[si];
+          if (sc !== NO_LOCK) ctx.fillText(PARAM_BY_ID.scale.steps![sc], x + (CELL - 2) / 2, y + hh / 2);
+          else ctx.fillRect(x + CELL / 2 - 2, y + hh / 2 - 1, 3, 3);
+          continue;
+        }
         if (tr.slide[si]) {
           // slide: a tie from this step into the next
           ctx.fillStyle = COLORS.text;
@@ -661,10 +598,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
         ctx.fillStyle = COLORS.cell;
         ctx.fillRect(0, rowTop + height - 1, w, 1);
         const arr = tr.locks[id];
+        let held = g ? noteValue(ti, id, first) : 0;
         for (let si = first; si <= last; si++) {
           if (!tr.s[si]) continue;
           const locked = arr[si] !== NO_LOCK;
-          const n = noteValue(ti, id, si);
+          if (g && locked) held = fromIndex(d, arr[si]);
+          const n = g ? held : noteValue(ti, id, si);
           const x = si * CELL - x0;
           ctx.fillStyle = locked ? COLORS.text : COLORS.line;
           if (d.bipolar) {
@@ -676,11 +615,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
             const bh = Math.max(2, n * span);
             ctx.fillRect(x + 4, bottom - bh, CELL - 8, bh);
           }
-          if (showValues) {
+          if (showValues && (!g || locked || si === first)) {
             // position as a number: 0–8, or −4…+4 around the centre for bipolar values
             const idx = toIndex(d, n);
             const half = (d.positions - 1) / 2;
-            const label = d.steps ? d.steps[idx] : d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
+            const label = d.steps ? d.steps[idx] : d.id === 'tempo' ? String(Math.round(toReal(d, n))) : d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
             ctx.fillStyle = locked ? COLORS.text : COLORS.dim;
             ctx.fillText(label, x + CELL / 2, rowTop + 7);
           }
@@ -753,18 +692,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   // ---- layout -----------------------------------------------------------
 
-  function section(title: string, ...children: HTMLElement[]) {
-    const s = h('div', 'section');
-    s.append(h('div', 'stitle', title), ...children);
-    return s;
-  }
-
-  function knobs_(...ids: string[]) {
-    const g = h('div', 'knobs');
-    g.append(...ids.map(knob));
-    return g;
-  }
-
   function button(label: string, cls: string, onClick: () => void) {
     const b = h('button', cls, label);
     b.addEventListener('click', onClick);
@@ -773,7 +700,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   function build() {
     const scrollLeft = scroller?.scrollLeft ?? 0;
-    knobs = [];
     heads = [];
     subLabels = [];
     rowAnim.clear();
@@ -802,7 +728,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
     header.append(
       h('div', 'logo', 'DUBBOX'),
       playBtn, recBtn, followBtn,
-      knobs_('tempo', 'swing', 'root', 'volume'),
       h('div', 'spacer'),
       button('SAVE', 'btn small', () => exportProject(p)),
       button('LOAD', 'btn small', () => file.click()),
@@ -823,13 +748,15 @@ export function mountUI(root: HTMLElement, initial: Project) {
     TRACKS.forEach((td, ti) => {
       const head = h('div', 'head');
       const name = h('div', 'name', (ti === expanded ? '▾ ' : '▸ ') + td.name);
-      name.title = `click = show sound per note · hold ${THROW_KEYS[ti].slice(3)} = dub throw · ${ti + 1} = mute · shift+${ti + 1} = solo`;
+      name.title = td.global
+        ? 'click = show the song-wide values (scale, key, tempo, FX)'
+        : `click = show sound per note · hold ${THROW_KEYS[ti].slice(3)} = dub throw · ${ti + 1} = mute · shift+${ti + 1} = solo`;
       name.addEventListener('click', () => {
         expanded = expanded === ti ? -1 : ti;
         build();
       });
       const toggles = h('div', 'toggles');
-      toggles.append(
+      if (!td.global) toggles.append(
         button('M', 'tog mute', () => { p.tracks[ti].mute = !p.tracks[ti].mute; flagsChanged(ti); }),
         button('S', 'tog solo', () => { p.tracks[ti].solo = !p.tracks[ti].solo; flagsChanged(ti); }),
       );
@@ -847,19 +774,13 @@ export function mountUI(root: HTMLElement, initial: Project) {
     });
     tracks.append(headCol, timeline());
 
-    const fx = h('footer', 'fx');
-    fx.append(
-      section('DELAY', knobs_('delay.time', 'delay.fbk', 'delay.tone')),
-      section('REVERB', knobs_('reverb.size')),
-      section('TAPE', knobs_('tape.age')),
-    );
 
     const help = h('div', 'help',
       'space play · 1–6 mute · shift+1–6 solo · hold Q W E R T Y = dub throw · ' +
-      'click step = on/off · drag sideways = paint · drag up/down or wheel on a step = pitch · click track name = sound per note · alt-click (bass/chord) = slide · ' +
+      'click step = on/off · drag sideways = paint · drag up/down or wheel on a step = pitch · click track name = sound per note (GLOBAL = scale, key, tempo, FX) · alt-click (bass/chord) = slide · ' +
       'click ruler = play from bar · drag ruler = select bars · shift-drag = select · ⌘C/X/V copy/cut/paste at mouse · ⌘D duplicate · D dice selection/hovered note · ⌘Z undo · wheel = scroll · F = follow');
 
-    root.append(header, tracks, fx, help);
+    root.append(header, tracks, help);
     p.tracks.forEach((_, i) => renderHead(i));
     scroller.scrollLeft = scrollLeft;
   }
@@ -871,12 +792,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
     animateRows(now, Math.min(0.1, (now - lastFrame) / 1000));
     lastFrame = now;
     if (t.playing) {
-      const bpm = toReal(PARAM_BY_ID.tempo, p.params.tempo);
+      const bpm = toReal(PARAM_BY_ID.tempo, noteValue(GLOBAL, 'tempo', Math.floor(t.phase)));
       t.phase = (t.enginePhase + (now - t.posAt) / 1000 / (60 / bpm / 4)) % SONG_STEPS;
       if (follow) scroller.scrollLeft = t.phase * CELL - scroller.clientWidth * 0.25;
     }
     drawTimeline();
-    knobs.forEach(renderKnob);
 
     if (t.rec) {
       const s = Math.floor((now - t.recStart) / 1000);

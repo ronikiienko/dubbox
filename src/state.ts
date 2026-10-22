@@ -1,4 +1,4 @@
-import { DEFAULT_SCALE, PARAMS, PARAM_BY_ID, SCALES, TRACKS, lockIds, pitchRange, snap, toIndex } from './params';
+import { DEFAULT_SCALE, GLOBAL, PARAMS, PARAM_BY_ID, SCALES, TRACKS, lockIds, pitchRange, snap, toIndex } from './params';
 
 export const STEPS_PER_BAR = 16;
 export const SONG_BARS = 300; // 10 min at 120 bpm
@@ -35,7 +35,7 @@ const KEY = 'dubbox.project';
 
 function emptyTrack(i: number): TrackState {
   return {
-    s: new Uint8Array(SONG_STEPS),
+    s: new Uint8Array(SONG_STEPS).fill(TRACKS[i].global ? 1 : 0), // GLOBAL: every step is always on
     note: new Int8Array(SONG_STEPS),
     slide: new Uint8Array(SONG_STEPS),
     locks: Object.fromEntries(lockIds(i).map((id) => [id, new Uint8Array(SONG_STEPS).fill(NO_LOCK)])),
@@ -76,7 +76,7 @@ function serialize(p: Project): SavedProject {
     params: p.params,
     tracks: p.tracks.map((tr) => {
       const hits: Hit[] = [];
-      for (let i = 0; i < SONG_STEPS; i++) if (tr.s[i]) hits.push(tr.slide[i] ? [i, tr.s[i], tr.note[i], 1] : [i, tr.s[i], tr.note[i]]);
+      if (tr !== p.tracks[GLOBAL]) for (let i = 0; i < SONG_STEPS; i++) if (tr.s[i]) hits.push(tr.slide[i] ? [i, tr.s[i], tr.note[i], 1] : [i, tr.s[i], tr.note[i]]);
       const locks: Record<string, [number, number][]> = {};
       for (const [id, arr] of Object.entries(tr.locks)) {
         const l: [number, number][] = [];
@@ -111,6 +111,11 @@ function deserialize(raw: { version?: number; params?: Record<string, number>; t
     const tr = p.tracks[i];
     if (rt && typeof rt === 'object' && 'hits' in rt) {
       const st = rt as SavedTrack;
+      if (TRACKS[i].global) for (const [id, l] of Object.entries(st.locks ?? {})) {
+        const arr = tr.locks[id];
+        if (arr) for (const [si, idx] of l) if (si >= 0 && si < SONG_STEPS) arr[si] = Math.min(idx, PARAM_BY_ID[id].positions - 1);
+      }
+      if (TRACKS[i].global) return;
       for (const [si, s, note, slide] of st.hits) {
         if (si < 0 || si >= SONG_STEPS) continue;
         tr.s[si] = s ? 1 : 0; // accents (2) were removed
@@ -118,6 +123,11 @@ function deserialize(raw: { version?: number; params?: Record<string, number>; t
         tr.slide[si] = slide ? 1 : 0;
       }
       for (const [oldId, l] of Object.entries(st.locks ?? {})) {
+        // v3 had Scale on CHORD notes: it now lives on GLOBAL
+        if (oldId === 'chord.scale') {
+          for (const [si, idx] of l) if (si >= 0 && si < SONG_STEPS) p.tracks[GLOBAL].locks.scale[si] = idx;
+          continue;
+        }
         const id = rename(oldId);
         const arr = tr.locks[id];
         if (!arr) continue;
@@ -155,7 +165,15 @@ function deserialize(raw: { version?: number; params?: Record<string, number>; t
     });
   }
   // Track strips have no knobs any more: bake old knob settings into the notes that used them.
+  // Global knobs are gone too: a non-default old setting becomes GLOBAL's value at the first step.
+  for (const id of lockIds(GLOBAL)) {
+    const d = PARAM_BY_ID[id];
+    const arr = p.tracks[GLOBAL].locks[id];
+    if (p.params[id] !== d.defN && arr[0] === NO_LOCK) arr[0] = toIndex(d, p.params[id]);
+    p.params[id] = d.defN;
+  }
   p.tracks.forEach((tr, i) => {
+    if (TRACKS[i].global) return;
     for (const id of lockIds(i)) {
       const d = PARAM_BY_ID[id];
       if (p.params[id] === d.defN) continue;

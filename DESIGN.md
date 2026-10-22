@@ -63,7 +63,7 @@ Every voice has **exactly the same** per-note values.
 | **Dist** | saturation, loudness-matched | ✓ | ✓ | ✓ | ✓ |
 | Phs · Lvl · **Pan** · Dly · Rev | mixer; Pan defaults to centre, equal-power, sends stay centred (pre-pan) | ✓ | ✓ | ✓ | ✓ |
 
-Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Pan, Dly, Rev, identical on every track. CHORD has two extra rows on top: **Scale** and **Size**.
+Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Pan, Dly, Rev, identical on every track. CHORD has one extra row on top: **Size**.
 Copying notes between tracks carries every value by its knob position.
 
 ### Effects (global)
@@ -78,7 +78,7 @@ Copying notes between tracks carries every value by its knob position.
 
 **Tempo**, **Swing**, **Root** (note), **Volume**.
 
-Knobs: 5 FX + 4 global = **9**. Everything else is per note.
+There are **no knobs**. Everything is per note, and the song-wide values are rows of the GLOBAL lane (3.5).
 
 ---
 
@@ -95,7 +95,7 @@ Knobs: 5 FX + 4 global = **9**. Everything else is per note.
 - Clock lives in the worklet: `samplesPerStep = sr × 60 / bpm / 4`. Sample-accurate triggers.
 
 ### 3.1 Per-note values (locks)
-- A track's sound is set **only per note**: its instrument values plus Lvl, Dly, Rev, Phs. There are no track knobs. Global knobs (delay, reverb, tape, tempo, swing, root, vol) are the only knobs.
+- A track's sound is set **only per note**: its instrument values plus Lvl, Dly, Rev, Phs. There are no knobs at all: song-wide values live on the GLOBAL lane (3.5).
 - **Click a track name** to expand it (one at a time). Under its lane, one row per value shows a **bar per note**: bright = this note has its own value, faint = the fixed default.
 - **The row the mouse rests on grows** (22 → 80 px) after a 150 ms dwell, easing open/closed over ~120 ms, so passing over rows doesn't make them flap. It grows downward so the mouse stays in it, prints each note's position as a number (0–8, or −4…+4 for Pan), and its label reveals a one-line description of the value. The row stays locked while a drag is running.
 - Drag a bar up/down = set that note's value. Drag across a row = draw values over every note you pass (bar height follows the mouse). Double-click a bar = back to the default.
@@ -111,10 +111,19 @@ Knobs: 5 FX + 4 global = **9**. Everything else is per note.
 - **⌘D** duplicates the selection right after itself and moves the selection onto the copy, so repeated ⌘D keeps extending (4 → 8 → 12 bars…).
 - Paste **overwrites** the target area (empty steps included). Notes carry pitch, slide and per-note values. Across tracks every value carries over by knob position (slide only between synth tracks).
 - **D = dice**: every value of the selected notes (or the note under the mouse) moves by a random −1 / 0 / +1 position. With the mouse over a bar row, only that row is diced. Press again to keep wandering; each press is one undo step.
-- **⌘Z / ⇧⌘Z** undo / redo (100 steps) for all note edits: clicks, paints, drags, bar edits, region edits. Mutes/solo and global knobs are not in the history.
+- **⌘Z / ⇧⌘Z** undo / redo (100 steps) for all note edits: clicks, paints, drags, bar edits, region edits. GLOBAL values are in it too. Mutes/solo are not.
 
 ### 3.3 Defaults in the middle
 Values with a neutral "normal" default sit at the **middle position** (4 of 0–8), so every note can go either way: **Decay** (range centred on the default), **Lvl** (0 … 2× default, top = +6 dB), **Pan** (centre), **LP on BASS/CHORD** (±3 octaves). Values whose natural default is "off" or "open" stay at the edge: HP, Dist, Phs, Dly, Rev, Res, drum LP (fully open).
+
+### 3.5 GLOBAL lane
+The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swing, Vol, Delay Time / Fbk / Tone, Reverb Size, Tape Age**.
+- **No notes to place.** Every step has a value. Expand GLOBAL (click its name) and draw in its rows like any value row: a value set on a step **holds until the next set value**; before the first one, the default. Held stretches are drawn dim, set steps bright (with their value when the row is hot).
+- Double-click a set step = remove it (the previous value holds through). Dice only touches set values (or the hovered step).
+- The collapsed lane marks the steps where something changes, with the scale's name if Scale changes there.
+- No mute/solo/throw. Selection, copy/paste (only GLOBAL → GLOBAL, so ruler copies carry their section's tempo/scale), undo all work.
+- Engine: a set value takes over at its step, before that step's notes trigger (so a scale change applies to the note on the same step). Seeking/looping re-resolves the values in force.
+- Old saves: global knob settings that differ from the default become GLOBAL values on step 0; v3 CHORD Scale values move to GLOBAL.
 
 ### 3.4 Stepped knobs
 Every knob snaps to fixed positions: **9** by default (0, ⅛ … 1; bipolar knobs have a centre). Exceptions: Root 12 notes, Delay Time 5, Swing 50/54/58/62/66/75 %, Tempo whole bpm. Locks are stored as position indices.
@@ -156,7 +165,7 @@ Saturation everywhere is `tanh`. Use 2× oversampling only in the synth filter a
 **SYNTH** (BASS = 1 note, CHORD = 4 notes)
 - Oscillators: saw only (PolyBLEP). No waveform choice.
 - **Analog drift (baked in):** each oscillator gets a slow random pitch wander of ±4 cents. CHORD voices are detuned ±6 cents from each other.
-- **Scale** (CHORD row, per note, holds until the next CHORD note): the 7 modes on Root, dark → bright, each step changes one note: Loc, Phr, **Min** (default), Dor, Mix, Maj, Lyd. Together they reach all 12 notes. **It is the scale of the whole song at that moment**: BASS and MELODY pitches are read in it too (a muted CHORD still sets it; before the first CHORD note it's Min). Borrowing = switch Scale on one chord.
+- **Scale** (GLOBAL row): the 7 modes on Root, dark → bright, each step changes one note: Loc, Phr, **Min** (default), Dor, Mix, Maj, Lyd. Together they reach all 12 notes. BASS, CHORD and MELODY pitches are all read in it. Borrowing = set Scale at that chord, set it back after.
 - **Size** (CHORD row, per note): oct, 5th, tri, **7th** (default), 9th. Stacked thirds from the scale, starting on the note's step, so major/minor/diminished fall out of the scale. **5th is always a perfect fifth** (power chord); tri and up follow the scale strictly, so e.g. step 1 in minor is diminished. Always 4 oscillators: oct/5th/tri double tones an octave up; 9th drops the 5th.
 - CHORD **voicing is automatic, around one fixed centre**: every chord tone lands in the window −1…+10 st around F2 (+ Root). So a chord always sounds the same wherever it's pasted, progressions move as few notes as possible, and nothing drifts. Pitch only picks the root step; ±7 gives the same voicing. Step 0 in Min with Size 7th = the old fixed m7 stab. No key compensation on CHORD (it stays in one register). Slide glides each oscillator to its new note.
 - One **4-pole ladder filter** (tanh stages), `Cutoff` 40 Hz–12 kHz (exp), `Res` 0–0.95 (self-oscillation just short of max).
