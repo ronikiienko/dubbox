@@ -52,7 +52,6 @@ const SUB_MIN = 5; // value rows are compact (a heat strip) and stretch between 
 const SUB_MAX = 14;
 const HEAT_BELOW = 16; // rows shorter than this draw as heat, taller as bars
 const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
-const HOT_DWELL = 150; // ms the mouse must rest on a row before it grows/hands over
 const HOT_PAD_TOP = 13; // room for the value numbers
 const HOT_PAD_BOTTOM = 2;
 const PANEL_BG = '#151513';
@@ -91,10 +90,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let subH = 8; // height of a compact value row, fitted to the window
   let spacerEl: HTMLElement;
   type RowRef = { ti: number; sub: number } | null;
-  let hot: RowRef = null; // bar row drawn tall (the one the mouse rested on)
-  let cand: RowRef = null; // row under the mouse right now; becomes hot after HOT_DWELL ms
-  let candSince = 0;
-  let gesture = false; // a drag is running: hot row is locked
+  let hot: RowRef = null; // the open value row, drawn tall for editing (opened by a click)
+  let openedAt = 0; // when it opened: the double-click that may follow isn't an edit
   const rowAnim = new Map<string, number>(); // animated row heights
   let subLabels: HTMLElement[][] = [];
 
@@ -306,12 +303,14 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   const sameRow = (a: RowRef, b: RowRef) => a?.ti === b?.ti && a?.sub === b?.sub;
 
-  /**
-   * Per frame: promote the row the mouse has rested on to hot (after a short dwell, so passing
-   * over rows doesn't make them flap), then ease every row's height toward its target.
-   */
-  function animateRows(now: number, dt: number) {
-    if (!gesture && !sameRow(cand, hot) && now - candSince > HOT_DWELL) hot = cand;
+  /** Click a compact row = open it for editing (one at a time); click it again or Esc = close. */
+  function openRow(r: RowRef) {
+    hot = sameRow(r, hot) ? null : r;
+    openedAt = performance.now();
+  }
+
+  /** Per frame: ease every row's height toward its target. */
+  function animateRows(_now: number, dt: number) {
     const k = 1 - Math.exp(-dt / 0.04); // ~120 ms to settle
     let changed = false;
     subLabels.forEach((labels, ti) => labels.forEach((el, j) => {
@@ -434,6 +433,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
       sel = null;
       pending = snapshot(p);
       const tr = p.tracks[ti];
+      if (sub >= 0 && !isHot(ti, sub)) {
+        // a compact row: this click only opens it
+        pending = null;
+        openRow({ ti, sub });
+        return;
+      }
       if (sub >= 0) {
         const id = subRows(ti)[sub];
         canvas.setPointerCapture(e.pointerId);
@@ -458,12 +463,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
     canvas.addEventListener('pointermove', (e) => {
       const h0 = hit(e);
       hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
-      // the hot row stays locked while a gesture is running, so a stroke never jumps rows
-      const c: RowRef = h0.sub >= 0 ? { ti: h0.ti, sub: h0.sub } : null;
-      if (!sameRow(c, cand)) {
-        cand = c;
-        candSince = performance.now();
-      }
       if (selDrag) {
         if (h0.si !== selDrag.s0 || h0.ti !== selDrag.t0) selDrag.moved = true;
         if (selDrag.moved || !selDrag.ruler) updateSel(h0.si, h0.ti);
@@ -526,19 +525,15 @@ export function mountUI(root: HTMLElement, initial: Project) {
       pending = null;
       gesture = false;
     };
-    canvas.addEventListener('pointerleave', () => {
-      hover = null;
-      if (!cand) return;
-      cand = null;
-      candSince = performance.now();
-    });
+    canvas.addEventListener('pointerleave', () => (hover = null));
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
 
     // double-click a bar = remove that note's lock (back to the knob)
     canvas.addEventListener('dblclick', (e) => {
       const { si, ti, sub } = hit(e);
-      if (ti >= 0 && sub >= 0) {
+      if (performance.now() - openedAt < 500) return; // that was the click that opened the row
+      if (ti >= 0 && sub >= 0 && isHot(ti, sub)) {
         pending = snapshot(p);
         setLock(ti, subRows(ti)[sub], si, NO_LOCK);
         pending = null;
@@ -794,7 +789,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     heads = [];
     subLabels = [];
     rowAnim.clear();
-    hot = cand = null;
+    hot = null;
     names = [];
     root.innerHTML = '';
 
@@ -859,6 +854,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const el = h('div', 'sublabel');
         el.append(h('div', 'subname', PARAM_BY_ID[id].label), h('div', 'subdesc', describe(id)));
         el.style.height = `${rowH(ti, j)}px`;
+        el.addEventListener('click', () => openRow({ ti, sub: j }));
         headCol.append(el);
         return el;
       });
@@ -918,6 +914,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     }
     if (e.code === 'Escape') {
       sel = null;
+      hot = null;
       if (helpOpen) setHelp(false);
     }
     if (e.key === '?') setHelp(!helpOpen);
