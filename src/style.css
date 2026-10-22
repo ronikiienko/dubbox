@@ -31,6 +31,7 @@ button:hover { border-color: var(--dim); }
 /* ---- header ---- */
 /* no boxes: a flat top bar over an edge-to-edge timeline */
 header { background: var(--panel); border-bottom: 1px solid var(--line); }
+.tracks { background: var(--panel); }
 header {
   flex: none;
   display: flex;
