@@ -80,7 +80,7 @@ export interface TrackDef {
 export const TRACKS: TrackDef[] = [
   // Every voice has the same core: LP (lowpass), Res, HP (highpass, off by default), Decay.
   { name: 'KICK', voice: ['kick.punch', 'kick.click', 'kick.lp', 'kick.res', 'kick.hp', 'kick.decay'] },
-  { name: 'HAT', voice: ['hat.lp', 'hat.res', 'hat.hp', 'hat.decay'] },
+  { name: 'HAT', voice: ['hat.metal', 'hat.lp', 'hat.res', 'hat.hp', 'hat.decay'] },
   { name: 'PERC', voice: ['perc.lp', 'perc.res', 'perc.hp', 'perc.decay'] },
   { name: 'BASS', slide: true, voice: ['bass.lp', 'bass.res', 'bass.hp', 'bass.decay'] },
   { name: 'CHORD', slide: true, voice: ['chord.size', 'chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
@@ -149,6 +149,7 @@ export function chordIntervals(scale: number, size: number, step: number, out: F
 
 /** One-line explanations of the per-note values, shown when a value row is expanded. */
 const DESCRIPTIONS: Record<string, string> = {
+  'hat.metal': 'Noise → metal. 0 = airy hiss, top = 808 ring.',
   'kick.punch': 'Pitch drop at the hit. 0 = flat sub boom, top = hard knock.',
   'kick.click': 'Beater click on the attack. 0 = none.',
   'chord.size': 'Chord size: octave, 5th, triad, 7th, 9th. Voiced automatically.',
@@ -220,6 +221,7 @@ export const PARAMS: ParamDef[] = [
   p({ id: 'kick.punch', label: 'Punch', min: 0, max: 1, def: 0.5, curve: 'lin' }),
   p({ id: 'kick.click', label: 'Click', min: 0, max: 1, def: 0, curve: 'lin' }),
   ...core('kick', [150, 12000, 12000], 0, around(0.45, 4)),
+  p({ id: 'hat.metal', label: 'Metal', min: 0, max: 1, def: 0, curve: 'lin' }),
   ...core('hat', [2000, 16000, 16000], 0, around(0.06, 8)),
   ...core('perc', [500, 12000, 12000], 0.25, around(0.12, 4)),
   ...synthParams('bass', 220, 0.25),

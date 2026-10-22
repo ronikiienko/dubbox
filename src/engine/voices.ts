@@ -78,8 +78,13 @@ export class Hat implements Voice {
   private lpA = 1;
   private q = 0.7;
   private ratio = 1;
+  private metal = 0;
+  // 808 metal: six square waves at inharmonic frequencies (Hz at pitch 0), free-running
+  private static METAL = [205.3, 304.4, 369.6, 522.7, 540, 800];
+  private mPh = new Float64Array(6);
   constructor(private sr: number) {}
-  set(tone: number, res: number, decay: number) {
+  set(tone: number, res: number, decay: number, metal: number) {
+    this.metal = metal;
     this.lpA = lpCoef(tone, this.sr);
     this.q = 0.7 + res * 8;
     this.svf.set(Hat.BASE * this.ratio, this.q, this.sr);
@@ -92,7 +97,20 @@ export class Hat implements Voice {
   }
   process() {
     if (this.amp < 1e-5) return 0;
-    this.svf.run(this.noise.next());
+    let src = this.noise.next();
+    if (this.metal > 0) {
+      let m = 0;
+      for (let i = 0; i < 6; i++) {
+        let ph = this.mPh[i] + (Hat.METAL[i] * this.ratio) / this.sr;
+        if (ph >= 1) ph -= 1;
+        this.mPh[i] = ph;
+        m += ph < 0.5 ? 1 : -1;
+      }
+      // equal-power crossfade; the squares get more gain to match the noise's loudness past the HP
+      const a = (this.metal * Math.PI) / 2;
+      src = src * Math.cos(a) + m * 1.15 * Math.sin(a);
+    }
+    this.svf.run(src);
     const y = this.lp2.lp(this.lp.lp(this.svf.hp, this.lpA), this.lpA) * this.amp;
     this.amp *= this.dec;
     return y * 1.8;
