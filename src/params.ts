@@ -204,10 +204,10 @@ export function hpHz(voice: string, n: number): number {
 const around = (mid: number, ratio: number): [number, number, number] => [mid / ratio, mid * ratio, mid];
 
 const core = (k: string, lp: [number, number, number], res: number, decay: [number, number, number]) => [
-  p({ id: `${k}.lp`, label: 'LP', min: lp[0], max: lp[1], def: lp[2], curve: 'exp', fmt: hz }),
-  p({ id: `${k}.res`, label: 'Res', min: 0, max: 0.95, def: res, curve: 'lin' }),
+  p({ id: `${k}.lp`, label: 'Lowpass', min: lp[0], max: lp[1], def: lp[2], curve: 'exp', fmt: hz }),
+  p({ id: `${k}.res`, label: 'Resonance', min: 0, max: 0.95, def: res, curve: 'lin' }),
   // position 0 = off (bypassed); 1..8 = the voice's HP_RANGE
-  p({ id: `${k}.hp`, label: 'HP', min: 0, max: 1, def: 0, curve: 'lin', fmt: (v) => (hpHz(k, v) ? hz(hpHz(k, v)) : 'off') }),
+  p({ id: `${k}.hp`, label: 'Highpass', min: 0, max: 1, def: 0, curve: 'lin', fmt: (v) => (hpHz(k, v) ? hz(hpHz(k, v)) : 'off') }),
   p({ id: `${k}.decay`, label: 'Decay', min: decay[0], max: decay[1], def: decay[2], curve: 'exp', fmt: sec }),
 ];
 
@@ -220,7 +220,7 @@ export const PARAMS: ParamDef[] = [
   p({ id: 'swing', label: 'Swing', min: 0, max: 5, def: 1, curve: 'step', steps: SWING.map((v) => v + '%') }),
   p({ id: 'scale', label: 'Scale', min: 0, max: 6, def: DEFAULT_SCALE, curve: 'step', steps: SCALES.map((c) => c[0]) }),
   p({ id: 'root', label: 'Root', min: 0, max: 11, def: 5, curve: 'step', steps: NOTES }),
-  p({ id: 'volume', label: 'Vol', min: 0, max: 1, def: 0.8, curve: 'lin' }),
+  p({ id: 'volume', label: 'Volume', min: 0, max: 1, def: 0.8, curve: 'lin' }),
 
   // voices
   // drum LP defaults fully open (top); Decay defaults to the middle
@@ -233,33 +233,33 @@ export const PARAMS: ParamDef[] = [
   p({ id: 'snare.snap', label: 'Snap', min: 0, max: 1, def: 0.5, curve: 'lin' }),
   ...core('snare', [500, 12000, 12000], 0, around(0.2, 4)),
   ...synthParams('bass', 220, 0.25),
-  p({ id: 'chord.size', label: 'Size', min: 0, max: 4, def: 3, curve: 'step', steps: SIZES }),
+  p({ id: 'chord.size', label: 'Chord size', min: 0, max: 4, def: 3, curve: 'step', steps: SIZES }),
   ...synthParams('chord', 600, 0.35),
   ...synthParams('mel', 1500, 0.3),
 
   // mixer
   ...TRACKS.flatMap((_, i) => [
-    p({ id: mixId(i, 'dst'), label: 'Dist', min: 0, max: 1, def: 0, curve: 'lin' }),
-    p({ id: mixId(i, 'lvl'), label: 'Lvl', min: 0, max: 8, def: 4, curve: 'step', steps: LVL_DB.map((db) => (db === -Infinity ? 'off' : db > 0 ? '+' + db : String(db))) }),
+    p({ id: mixId(i, 'dst'), label: 'Distortion', min: 0, max: 1, def: 0, curve: 'lin' }),
+    p({ id: mixId(i, 'lvl'), label: 'Level', min: 0, max: 8, def: 4, curve: 'step', steps: LVL_DB.map((db) => (db === -Infinity ? 'off' : db > 0 ? '+' + db : String(db))) }),
     p({
       id: mixId(i, 'pan'), label: 'Pan', min: -1, max: 1, def: 0, curve: 'lin', bipolar: true,
       fmt: (v) => (Math.abs(v) < 0.01 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100)),
     }),
     p({ id: mixId(i, 'dck'), label: 'Duck', min: 0, max: 1, def: 0, curve: 'lin' }),
-    p({ id: mixId(i, 'dly'), label: 'Dly', min: 0, max: 1, def: 0, curve: 'lin' }),
-    p({ id: mixId(i, 'rev'), label: 'Rev', min: 0, max: 1, def: 0, curve: 'lin' }),
-    p({ id: mixId(i, 'phs'), label: 'Phs', min: 0, max: 1, def: 0, curve: 'lin' }),
+    p({ id: mixId(i, 'dly'), label: 'Delay', min: 0, max: 1, def: 0, curve: 'lin' }),
+    p({ id: mixId(i, 'rev'), label: 'Reverb', min: 0, max: 1, def: 0, curve: 'lin' }),
+    p({ id: mixId(i, 'phs'), label: 'Phaser', min: 0, max: 1, def: 0, curve: 'lin' }),
   ]),
 
   // fx
-  p({ id: 'delay.time', label: 'Time', min: 0, max: 4, def: 2, curve: 'step', steps: ['1/16', '1/8', '3/16', '1/4', '3/8'] }),
-  p({ id: 'delay.fbk', label: 'Fbk', min: 0, max: 1.1, def: 0.55, curve: 'lin' }),
+  p({ id: 'delay.time', label: 'Delay time', min: 0, max: 4, def: 2, curve: 'step', steps: ['1/16', '1/8', '3/16', '1/4', '3/8'] }),
+  p({ id: 'delay.fbk', label: 'Delay feedback', min: 0, max: 1.1, def: 0.55, curve: 'lin' }),
   p({
-    id: 'delay.tone', label: 'Tone', min: -1, max: 1, def: -0.25, curve: 'lin', bipolar: true,
+    id: 'delay.tone', label: 'Delay tone', min: -1, max: 1, def: -0.25, curve: 'lin', bipolar: true,
     fmt: (v) => (v < -0.05 ? 'dark ' + Math.round(-v * 100) : v > 0.05 ? 'thin ' + Math.round(v * 100) : 'flat'),
   }),
-  p({ id: 'reverb.size', label: 'Size', min: 0, max: 1, def: 0.5, curve: 'lin', fmt: (v) => (1.5 * Math.pow(14 / 1.5, v)).toFixed(1) + ' s' }),
-  p({ id: 'tape.age', label: 'Age', min: 0, max: 1, def: 0.3, curve: 'lin' }),
+  p({ id: 'reverb.size', label: 'Reverb size', min: 0, max: 1, def: 0.5, curve: 'lin', fmt: (v) => (1.5 * Math.pow(14 / 1.5, v)).toFixed(1) + ' s' }),
+  p({ id: 'tape.age', label: 'Tape age', min: 0, max: 1, def: 0.3, curve: 'lin' }),
 ];
 
 export const PARAM_BY_ID: Record<string, ParamDef> = Object.fromEntries(PARAMS.map((d) => [d.id, d]));
