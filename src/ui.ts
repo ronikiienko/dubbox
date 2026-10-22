@@ -585,6 +585,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
     for (let ti = 0; ti < TRACKS.length; ti++) {
       const tr = p.tracks[ti];
       const top = laneTop(ti);
+      // a dark seam between tracks, so each track's rows read as one group
+      if (ti > 0) {
+        ctx.fillStyle = '#0c0b0a';
+        ctx.fillRect(0, top, w, 1);
+      }
       const pad = Math.round(mainH * 0.17);
       const y = top + pad;
       const hh = mainH - pad * 2;
