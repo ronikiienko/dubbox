@@ -11,5 +11,8 @@
   "devDependencies": {
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
+  },
+  "dependencies": {
+    "@breezystack/lamejs": "^1.2.7"
   }
 }

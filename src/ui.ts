@@ -821,6 +821,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const header = h('header');
     playBtn = button('▶ PLAY', 'btn', () => setPlaying(!t.playing));
     recBtn = button('● REC', 'btn rec', () => setRec(!t.rec));
+    const fmtBtn = button(recorder.format.toUpperCase(), 'btn small', () => {
+      recorder.setFormat(recorder.format === 'wav' ? 'mp3' : 'wav');
+      fmtBtn.textContent = recorder.format.toUpperCase();
+    });
+    fmtBtn.title = 'REC saves as WAV (24-bit) or MP3 (320 kbps)';
     followBtn = button('FOLLOW', 'btn small lit', () => setFollow(!follow));
     followBtn.title = 'keep the playhead in view (F)';
     loopBtn = button('LOOP', 'btn small' + (loop ? ' lit' : ''), toggleLoop);
@@ -839,7 +844,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     });
     header.append(
       h('div', 'logo', 'DUBBOX'),
-      playBtn, recBtn, followBtn, loopBtn,
+      playBtn, recBtn, fmtBtn, followBtn, loopBtn,
       h('div', 'spacer'),
       helpBtn = button('?', 'btn small help-btn', () => setHelp(!helpOpen)),
       button('SAVE', 'btn small', () => exportProject(p)),

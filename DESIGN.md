@@ -36,7 +36,7 @@ src/
   params.ts        THE parameter registry (single source of truth, shared by UI + engine)
   state.ts         project model, defaults, autosave, save/load JSON
   ui.ts            render screen, knob + step widgets, keyboard
-  wav.ts           encode recorded float chunks to WAV
+  wav.ts           encode recorded float chunks to WAV or MP3
   style.css
   engine/
     worklet.ts     AudioWorkletProcessor: clock, sequencer, mixing, routing
@@ -288,7 +288,7 @@ worklet → main:
 
 ## 8. Recording
 
-- **REC** button: records the master output in realtime while you perform. The worklet streams chunks, and on stop it encodes a **24-bit WAV** and downloads it (`dubbox-<date>.wav`).
+- **REC** button: records the master output in realtime while you perform. The worklet streams chunks, and on stop it encodes a **24-bit WAV** or a **320 kbps MP3** (the WAV/MP3 toggle next to REC, remembered in localStorage; LAME via `@breezystack/lamejs`) and downloads it (`dubbox-<date>.wav` / `.mp3`). MP3 needs a 32/44.1/48 kHz context, otherwise it falls back to WAV.
 - No offline render. The performance *is* the arrangement.
 
 ---
