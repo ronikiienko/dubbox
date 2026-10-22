@@ -24,7 +24,7 @@ export function audible(tracks: TrackState[], i: number): boolean {
 export const NO_LOCK = 255;
 
 export interface Project {
-  version: 3;
+  version: 4;
   params: Record<string, number>; // normalized base values
   tracks: TrackState[];
 }
@@ -46,7 +46,7 @@ function emptyTrack(i: number): TrackState {
 
 export function emptyProject(): Project {
   return {
-    version: 3,
+    version: 4,
     params: Object.fromEntries(PARAMS.map((d) => [d.id, d.defN])),
     tracks: TRACKS.map((_, i) => emptyTrack(i)),
   };
@@ -65,14 +65,14 @@ interface SavedTrack {
 }
 
 interface SavedProject {
-  version: 3;
+  version: 4;
   params: Record<string, number>;
   tracks: SavedTrack[];
 }
 
 function serialize(p: Project): SavedProject {
   return {
-    version: 3,
+    version: 4,
     params: p.params,
     tracks: p.tracks.map((tr) => {
       const hits: Hit[] = [];
@@ -100,14 +100,20 @@ interface V1Track {
 function deserialize(raw: { version?: number; params?: Record<string, number>; tracks?: unknown[] }): Project {
   const p = emptyProject();
   // the voice lowpass was called Cutoff (synths), then Tone; now LP
-  const rename = (id: string) => id.replace(/^(kick|hat|perc|bass|chord)\.(cutoff|tone)$/, '$1.lp');
+  // before v4 there was no SNARE (index 3): tracks from BASS on, and their mixer ids, move up one
+  const old = (raw.version ?? 1) < 4;
+  const rename = (id: string) =>
+    id
+      .replace(/^(kick|hat|perc|bass|chord)\.(cutoff|tone)$/, '$1.lp')
+      .replace(/^mix\.(\d+)\./, (m, k) => (old && +k >= 3 ? `mix.${+k + 1}.` : m));
+  const rawTracks = old && raw.tracks ? [...raw.tracks.slice(0, 3), null, ...raw.tracks.slice(3)] : raw.tracks;
   for (const [id, v] of Object.entries(raw.params ?? {})) p.params[rename(id)] = v;
   // knobs are stepped: snap values saved before that (or hand-edited) onto a detent
   for (const id in p.params) {
     if (PARAM_BY_ID[id]) p.params[id] = snap(PARAM_BY_ID[id], p.params[id]);
     else delete p.params[id];
   }
-  raw.tracks?.slice(0, TRACKS.length).forEach((rt, i) => {
+  rawTracks?.slice(0, TRACKS.length).forEach((rt, i) => {
     const tr = p.tracks[i];
     if (rt && typeof rt === 'object' && 'hits' in rt) {
       const st = rt as SavedTrack;

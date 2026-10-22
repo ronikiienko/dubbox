@@ -49,7 +49,7 @@ src/
 
 ## 2. The instrument
 
-### Tracks (fixed, 6): KICK, HAT, PERC, BASS, CHORD, MELODY
+### Tracks (fixed, 7 + GLOBAL): KICK, HAT, PERC, SNARE, BASS, CHORD, MELODY
 
 Every voice has **exactly the same** per-note values.
 
@@ -63,7 +63,7 @@ Every voice has **exactly the same** per-note values.
 | **Dist** | saturation, loudness-matched | ✓ | ✓ | ✓ | ✓ |
 | Phs · Lvl · **Pan** · Dly · Rev | mixer; Pan defaults to centre, equal-power, sends stay centred (pre-pan) | ✓ | ✓ | ✓ | ✓ |
 
-Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Pan, Dly, Rev, identical on every track. CHORD has one extra row on top: **Size**. HAT has one: **Metal** (crossfade from noise to the 808 cluster of six squares at 205/304/370/523/540/800 Hz × pitch, through the same HP/LP; default 0 = noise). KICK has two: **Punch** (pitch drop at the hit: depth and speed together, 0 = flat sub sine, 4 = default 4×→1× over 30 ms, 8 = hard knock from 13×) and **Click** (1–3 ms beater tick, noise + 2.5 kHz blip through the kick's LP; default 0).
+Row order is LP, Res, HP, Decay, Dist, Phs, Lvl, Pan, Dly, Rev, identical on every track. CHORD has one extra row on top: **Size**. SNARE has one: **Snap** (snare → clap: 0 = two tuned sine heads 185/330 Hz × pitch with a short pitch drop + a little HP-noise, a round dub snare; 4 = default, body + bright noise, 909-ish; 8 = clap: three band-passed noise bursts 11 ms apart then a tail, no body; three anchors loudness-matched within ~0.7 dB). Keys: 1–7 mute/solo, Q W E R T Y U throws. Files before v4 get an empty SNARE inserted at index 3 (later tracks and their mix ids move up one). HAT has one: **Metal** (crossfade from noise to the 808 cluster of six squares at 205/304/370/523/540/800 Hz × pitch, through the same HP/LP; default 0 = noise). KICK has two: **Punch** (pitch drop at the hit: depth and speed together, 0 = flat sub sine, 4 = default 4×→1× over 30 ms, 8 = hard knock from 13×) and **Click** (1–3 ms beater tick, noise + 2.5 kHz blip through the kick's LP; default 0).
 Copying notes between tracks carries every value by its knob position.
 
 ### Effects (global)

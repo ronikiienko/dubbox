@@ -22,8 +22,8 @@ const clamp = (v: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
 const HELP: [string, string][] = [
   ['space', 'play / stop'],
   ['F', 'follow playhead'],
-  ['1–6 / ⇧1–6', 'mute / solo'],
-  ['hold Q W E R T Y', 'dub throw'],
+  ['1–7 / ⇧1–7', 'mute / solo'],
+  ['hold Q W E R T Y U', 'dub throw'],
   ['click step', 'on / off'],
   ['drag sideways', 'paint steps'],
   ['drag ↕ / wheel on step', 'pitch'],
@@ -41,7 +41,7 @@ const HELP: [string, string][] = [
   ['wheel', 'scroll'],
 ];
 
-const THROW_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY'];
+const THROW_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU'];
 
 // timeline geometry (px)
 const CELL = 22;
@@ -887,7 +887,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       return;
     }
     if (e.repeat || e.metaKey || e.ctrlKey) return;
-    const digit = /^Digit([1-6])$/.exec(e.code);
+    const digit = /^Digit([1-7])$/.exec(e.code);
     if (digit) {
       const i = +digit[1] - 1;
       if (e.shiftKey) p.tracks[i].solo = !p.tracks[i].solo;

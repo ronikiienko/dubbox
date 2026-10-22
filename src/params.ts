@@ -82,6 +82,7 @@ export const TRACKS: TrackDef[] = [
   { name: 'KICK', voice: ['kick.punch', 'kick.click', 'kick.lp', 'kick.res', 'kick.hp', 'kick.decay'] },
   { name: 'HAT', voice: ['hat.metal', 'hat.lp', 'hat.res', 'hat.hp', 'hat.decay'] },
   { name: 'PERC', voice: ['perc.lp', 'perc.res', 'perc.hp', 'perc.decay'] },
+  { name: 'SNARE', voice: ['snare.snap', 'snare.lp', 'snare.res', 'snare.hp', 'snare.decay'] },
   { name: 'BASS', slide: true, voice: ['bass.lp', 'bass.res', 'bass.hp', 'bass.decay'] },
   { name: 'CHORD', slide: true, voice: ['chord.size', 'chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
   { name: 'MELODY', slide: true, voice: ['mel.lp', 'mel.res', 'mel.hp', 'mel.decay'] },
@@ -150,6 +151,7 @@ export function chordIntervals(scale: number, size: number, step: number, out: F
 /** One-line explanations of the per-note values, shown when a value row is expanded. */
 const DESCRIPTIONS: Record<string, string> = {
   'hat.metal': 'Noise → metal. 0 = airy hiss, top = 808 ring.',
+  'snare.snap': 'Snare → clap. 0 = round dub snare, top = clap.',
   'kick.punch': 'Pitch drop at the hit. 0 = flat sub boom, top = hard knock.',
   'kick.click': 'Beater click on the attack. 0 = none.',
   'chord.size': 'Chord size: octave, 5th, triad, 7th, 9th. Voiced automatically.',
@@ -181,6 +183,7 @@ const HP_RANGE: Record<string, [number, number]> = {
   kick: [30, 1000],
   hat: [3000, 16000],
   perc: [200, 8000],
+  snare: [100, 6000],
   bass: [30, 2000],
   chord: [60, 4000],
   mel: [80, 6000],
@@ -224,6 +227,8 @@ export const PARAMS: ParamDef[] = [
   p({ id: 'hat.metal', label: 'Metal', min: 0, max: 1, def: 0, curve: 'lin' }),
   ...core('hat', [2000, 16000, 16000], 0, around(0.06, 8)),
   ...core('perc', [500, 12000, 12000], 0.25, around(0.12, 4)),
+  p({ id: 'snare.snap', label: 'Snap', min: 0, max: 1, def: 0.5, curve: 'lin' }),
+  ...core('snare', [500, 12000, 12000], 0, around(0.2, 4)),
   ...synthParams('bass', 220, 0.25),
   p({ id: 'chord.size', label: 'Size', min: 0, max: 4, def: 3, curve: 'step', steps: SIZES }),
   ...synthParams('chord', 600, 0.35),

@@ -158,6 +158,87 @@ export class Perc implements Voice {
   }
 }
 
+/**
+ * Snare ↔ clap. Snap 0: two tuned sine heads + a little noise (round dub snare); 0.5: body + bright
+ * noise (909-ish); 1: clap = three noise bursts 11 ms apart, then a tail, no body.
+ */
+export class Snare implements Voice {
+  private amp = 0; // noise / tail envelope
+  private dec = 0;
+  private bAmp = 0; // body envelope (shorter than the noise)
+  private bDec = 0;
+  private pEnv = 0;
+  private pDec: number;
+  private ph1 = 0;
+  private ph2 = 0;
+  private t = 0; // samples since the hit
+  private ratio = 1;
+  private snap = 0.5;
+  private wb = 0; // mix weights for body / snare noise / clap, set per hit
+  private wn = 0;
+  private wc = 0;
+  private tone = 12000;
+  private res = 0;
+  private hpN = new SVF();
+  private bpC = new SVF();
+  private filter = new Ladder();
+  private noise = new Noise(4321);
+  constructor(private sr: number) {
+    this.pDec = Math.exp(-1 / (0.01 * sr));
+  }
+  set(tone: number, res: number, decay: number, snap: number) {
+    this.tone = tone;
+    this.res = res;
+    this.dec = decayCoef(decay, this.sr);
+    this.bDec = decayCoef(decay * 0.6, this.sr);
+    this.snap = snap;
+  }
+  trigger(note: number) {
+    this.ratio = ratio(note);
+    this.t = 0;
+    this.amp = this.bAmp = this.pEnv = 1;
+    this.ph1 = this.ph2 = 0;
+    this.hpN.set(1800 * this.ratio, 0.7, this.sr);
+    this.bpC.set(1100 * this.ratio, 1.2, this.sr);
+    // three anchors (snare / 909 / clap), linear in between, each loudness-matched
+    const s = this.snap;
+    const lerp = (a: number, b: number, c: number) => (s < 0.5 ? a + (b - a) * s * 2 : b + (c - b) * (s - 0.5) * 2);
+    const g = lerp(SNARE_GAIN[0], SNARE_GAIN[1], SNARE_GAIN[2]);
+    this.wb = lerp(1, 0.7, 0) * g;
+    this.wn = lerp(0.35, 0.9, 0) * g;
+    this.wc = lerp(0, 0, 1) * g;
+  }
+  process() {
+    if (this.amp < 1e-5) return 0;
+    const ts = this.t++ / this.sr;
+    this.pEnv *= this.pDec;
+    const f = this.ratio * (1 + 0.5 * this.pEnv);
+    this.ph1 += (185 * f) / this.sr;
+    this.ph2 += (330 * f) / this.sr;
+    if (this.ph1 >= 1) this.ph1 -= 1;
+    if (this.ph2 >= 1) this.ph2 -= 1;
+    const body = (Math.sin(TAU * this.ph1) * 0.6 + Math.sin(TAU * this.ph2) * 0.4) * this.bAmp;
+    this.bAmp *= this.bDec;
+    const n = this.noise.next();
+    this.hpN.run(n);
+    let y = this.wb * body + this.wn * this.hpN.hp * this.amp;
+    if (this.wc > 0) {
+      this.bpC.run(n);
+      // clap: three short bursts, then the tail takes over
+      let ce = 0;
+      for (let k = 0; k < 3; k++) {
+        const d = ts - k * 0.011;
+        if (d >= 0) ce = Math.max(ce, Math.exp(-d / 0.004));
+      }
+      if (ts >= 0.03) ce = Math.max(ce, this.amp * 0.7);
+      y += this.wc * this.bpC.bp * ce;
+    }
+    this.amp *= this.dec;
+    return this.filter.process(y * 0.7, this.tone, this.res, this.sr);
+  }
+}
+const SNARE_GAIN = [1.26, 1.43, 4.5]; // loudness match at Snap 0 / 0.5 / 1 (measured)
+
 const HOLD_LEVEL = 0.3;
 const DB_PER_OCTAVE = -2; // higher notes sound louder (esp. on small speakers), so tilt them down
 
