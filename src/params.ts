@@ -94,15 +94,28 @@ export const TRACKS: TrackDef[] = [
 ];
 export const GLOBAL = TRACKS.length - 1;
 
-export const mixId = (i: number, k: 'dst' | 'phs' | 'lvl' | 'pan' | 'dly' | 'rev') => `mix.${i}.${k}`;
+export const mixId = (i: number, k: 'dst' | 'crs' | 'phs' | 'lvl' | 'pan' | 'dly' | 'rev') => `mix.${i}.${k}`;
 
 /** A track's per-note values, in signal-flow order: voice → Dist → Phs → Lvl → Pan, plus sends. */
 export const lockIds = (i: number) => TRACKS[i].global ? TRACKS[i].voice : [
   ...TRACKS[i].voice,
-  mixId(i, 'dst'), mixId(i, 'phs'), mixId(i, 'lvl'), mixId(i, 'pan'), mixId(i, 'dly'), mixId(i, 'rev'),
+  mixId(i, 'dst'), mixId(i, 'crs'), mixId(i, 'phs'), mixId(i, 'lvl'), mixId(i, 'pan'), mixId(i, 'dly'), mixId(i, 'rev'),
 ];
 
 export const SWING = [50, 54, 58, 62, 66, 75];
+
+/** Bitcrush positions: [bits, sample rate Hz]. 1 = SP-1200 (12-bit, 26 kHz), then down to 4-bit 2.5 kHz. */
+export const CRUSH: [number, number][] = [
+  [0, 0], // off
+  [12, 26040],
+  [12, 22050],
+  [10, 16000],
+  [8, 12000],
+  [8, 8000],
+  [6, 6000],
+  [5, 4000],
+  [4, 2500],
+];
 
 /** Lvl positions in dB (middle = 0 dB = the default level): big audible steps down, 3 dB steps up. */
 export const LVL_DB = [-Infinity, -18, -12, -6, 0, 3, 6, 9, 12];
@@ -170,6 +183,7 @@ const DESCRIPTIONS: Record<string, string> = {
   hp: 'Highpass. Cuts the low end. 0 = off.',
   decay: 'How long the note rings. Middle = default.',
   dst: 'Saturation. More grit, same loudness.',
+  crs: '90s sampler grit: fewer bits, lower sample rate. 0 = off.',
   phs: 'Phaser: slow swirling sweep. 0 = off.',
   lvl: 'Volume in dB. Middle = 0 dB, down to off, up to +12.',
   pan: 'Left ↔ right. Middle = centre.',
@@ -237,6 +251,10 @@ export const PARAMS: ParamDef[] = [
   // mixer
   ...TRACKS.flatMap((_, i) => [
     p({ id: mixId(i, 'dst'), label: 'Distortion', min: 0, max: 1, def: 0, curve: 'lin' }),
+    p({
+      id: mixId(i, 'crs'), label: 'Bitcrush', min: 0, max: 1, def: 0, curve: 'lin',
+      fmt: (v) => { const [b, r] = CRUSH[Math.round(v * 8)]; return b ? `${b}-bit ${(r / 1000).toFixed(1)}k` : 'off'; },
+    }),
     p({ id: mixId(i, 'lvl'), label: 'Level', min: 0, max: 8, def: 4, curve: 'step', steps: LVL_DB.map((db) => (db === -Infinity ? 'off' : db > 0 ? '+' + db : String(db))) }),
     p({
       id: mixId(i, 'pan'), label: 'Pan', min: -1, max: 1, def: 0, curve: 'lin', bipolar: true,

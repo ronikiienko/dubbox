@@ -5,7 +5,7 @@ import { GLOBAL, PARAMS, lvlGain, PARAM_BY_ID, SWING, chordIntervals, stepToSemi
 import { NO_LOCK, audible, type TrackState } from '../state';
 import type { FromEngine, ToEngine } from './bridge';
 import { SVF, Smooth, timeCoef } from './dsp';
-import { Drive, Glue, Phaser, Reverb, Tape, TapeDelay } from './fx';
+import { Crush, Drive, Glue, Phaser, Reverb, Tape, TapeDelay } from './fx';
 import { Hat, Kick, Perc, Snare, Synth, type Voice } from './voices';
 
 declare const sampleRate: number;
@@ -55,6 +55,7 @@ class Engine extends AudioWorkletProcessor {
   private hpOn = new Array<boolean>(N).fill(false);
   private hpIds = TRACKS.map((td) => td.voice.find((id) => id.endsWith('.hp'))!);
   private drives = TRACKS.map(() => new Drive(this.sr));
+  private crushes = TRACKS.map(() => new Crush(this.sr));
   private phasers = TRACKS.map(() => new Phaser(this.sr));
   private lvlT = new Float64Array(N);
   private dlyT = new Float64Array(N);
@@ -195,6 +196,7 @@ class Engine extends AudioWorkletProcessor {
     this.hpOn[t] = hp > 0;
     if (this.hpOn[t]) this.hps[t].set(hp, 0.707, this.sr);
     this.drives[t].set(R[mixId(t, 'dst')]);
+    this.crushes[t].set(R[mixId(t, 'crs')]);
     this.phasers[t].set(R[mixId(t, 'phs')]);
     switch (t) {
       case 0: this.kick.set(R['kick.lp'], R['kick.res'], R['kick.decay'], R['kick.punch'], R['kick.click']); break;
@@ -290,7 +292,7 @@ class Engine extends AudioWorkletProcessor {
 
       for (let t = 0; t < N; t++) vals[t] = this.voices[t].process();
 
-      // per track: highpass → dist → phaser → fader → post-fader sends
+      // per track: highpass → dist → bitcrush → phaser → fader → post-fader sends
       let dryL = 0, dryR = 0, dIn = 0, rIn = 0;
       for (let t = 0; t < N; t++) {
         const g = this.lvl[t].next(this.lvlT[t]);
@@ -299,7 +301,7 @@ class Engine extends AudioWorkletProcessor {
           this.hps[t].run(x);
           x = this.hps[t].hp;
         }
-        const v = this.phasers[t].process(this.drives[t].process(x)) * g;
+        const v = this.phasers[t].process(this.crushes[t].process(this.drives[t].process(x))) * g;
         // equal-power pan, scaled so centre = unity on both sides (sounds exactly like no pan)
         const th = (this.pan[t].next(this.panT[t]) + 1) * (Math.PI / 4);
         dryL += v * Math.SQRT2 * Math.cos(th);

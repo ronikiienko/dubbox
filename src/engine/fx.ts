@@ -1,3 +1,4 @@
+import { CRUSH } from '../params';
 import { DelayLine, Noise, OnePole, SVF, Smooth, TAU, clamp, dbToGain, lpCoef, tanh, timeCoef } from './dsp';
 
 /** Tape echo: HP + LP + tanh inside the feedback loop, slewed time, wow. */
@@ -119,6 +120,33 @@ export class Reverb {
  * before vs after the curve), so it's right from the first sample of a note; a slow RMS
  * correction then trims what the sine model misses. 0 = bypassed.
  */
+/** Bitcrusher: sample-and-hold at a lower rate (no anti-aliasing, that's the sound) + bit-depth quantize. */
+export class Crush {
+  private on = false;
+  private ph = 0;
+  private inc = 0;
+  private q = 1;
+  private hold = 0;
+  constructor(private sr: number) {}
+  /** v = 0..1 knob position; 0 = bypass. */
+  set(v: number) {
+    const [bits, rate] = CRUSH[Math.round(v * 8)];
+    this.on = bits > 0;
+    if (!this.on) return;
+    this.inc = rate / this.sr;
+    this.q = Math.pow(2, bits - 1);
+  }
+  process(x: number): number {
+    if (!this.on) return x;
+    this.ph += this.inc;
+    if (this.ph >= 1) {
+      this.ph -= 1;
+      this.hold = Math.round(x * this.q) / this.q;
+    }
+    return this.hold;
+  }
+}
+
 export class Drive {
   private amt = 0;
   private g = 1;
