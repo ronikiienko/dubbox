@@ -82,6 +82,14 @@ const COLORS = {
   bar: '#a39d90', // a note's value bar: one tone, set or default alike
 };
 
+/** Blend two #rrggbb colours: k = 0 → a, 1 → b. */
+function mix(a: string, b: string, k: number): string {
+  const ch = (c: string, i: number) => parseInt(c.slice(1 + 2 * i, 3 + 2 * i), 16);
+  return `rgb(${[0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * k)).join(',')})`;
+}
+
+const GLOW_STEPS = 2; // a played note lights up, then fades over this many steps
+
 // ---- UI -----------------------------------------------------------------
 
 export function mountUI(root: HTMLElement, initial: Project) {
@@ -690,6 +698,13 @@ export function mountUI(root: HTMLElement, initial: Project) {
     return scroller;
   }
 
+  /** How lit a note at step `si` is right now: 1 the moment the playhead hits it, fading to 0. */
+  const glow = (ti: number, si: number) => {
+    if (!t.playing || !audible(p.tracks, ti)) return 0;
+    const d = t.phase - si;
+    return d >= 0 && d < GLOW_STEPS ? (1 - d / GLOW_STEPS) ** 2 : 0;
+  };
+
   /** One value row of a track: a bar per note, in its slot or (magnified) in the lens. */
   function drawRow(ctx: CanvasRenderingContext2D, ti: number, j: number, first: number, last: number, x0: number, w: number) {
     const tr = p.tracks[ti];
@@ -727,7 +742,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const n = g ? held : noteValue(ti, id, si);
       const x = si * CELL - x0;
       // GLOBAL: set here = bright, held from earlier = dim · notes: every value looks the same
-      ctx.fillStyle = !g ? COLORS.bar : locked ? COLORS.text : COLORS.line;
+      const lit = g ? 0 : glow(ti, si);
+      ctx.fillStyle = !g ? (lit ? mix(COLORS.bar, '#ffffff', lit) : COLORS.bar) : locked ? COLORS.text : COLORS.line;
       if (d.bipolar) {
         // grows up/down from the centre line (e.g. Pan: up = right, down = left)
         const mid = rowTop + pad + span / 2;
@@ -841,7 +857,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
       for (let si = first; si <= last && !g; si++) {
         const st = tr.s[si];
         const x = Math.round(si * CELL - x0) + gap; // whole pixels: crisp at any zoom
-        ctx.fillStyle = st ? COLORS.accentDim : si % 4 === 0 && CELL >= 4 ? COLORS.beat : COLORS.cell;
+        const lit = st ? glow(ti, si) : 0;
+        ctx.fillStyle = lit ? mix(COLORS.accentDim, '#ffc566', lit) : st ? COLORS.accentDim : si % 4 === 0 && CELL >= 4 ? COLORS.beat : COLORS.cell;
         ctx.fillRect(x, y, Math.round((si + 1) * CELL - x0) - x - gap, hh);
         if (!st || CELL < 11) continue;
         if (tr.slide[si]) {
