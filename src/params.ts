@@ -23,8 +23,6 @@ type Spec = Omit<ParamDef, 'defN' | 'fmt' | 'positions'> & Partial<Pick<ParamDef
 const hz = (v: number) => (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : Math.round(v) + ' Hz');
 const sec = (v: number) => (v < 1 ? Math.round(v * 1000) + ' ms' : v.toFixed(2) + ' s');
 const pct = (v: number) => Math.round(v * 100) + '%';
-const shape = (v: number) =>
-  v < 0.2 ? 'saw' : v < 0.5 ? 'saw/sq' : v < 0.55 ? 'square' : 'pw ' + Math.round(50 - (v - 0.5) * 80) + '%';
 
 export const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -79,12 +77,12 @@ export interface TrackDef {
 }
 
 export const TRACKS: TrackDef[] = [
-  // Every voice has the same core: Tone (lowpass brightness), Res, Decay. Only Shape is synth-only.
+  // Every voice has the same core: Tone (lowpass brightness), Res, Decay.
   { name: 'KICK', voice: ['kick.tone', 'kick.res', 'kick.decay'] },
   { name: 'HAT', voice: ['hat.tone', 'hat.res', 'hat.decay'] },
   { name: 'PERC', voice: ['perc.tone', 'perc.res', 'perc.decay'] },
-  { name: 'BASS', slide: true, voice: ['bass.tone', 'bass.res', 'bass.decay', 'bass.shape'] },
-  { name: 'CHORD', slide: true, voice: ['chord.tone', 'chord.res', 'chord.decay', 'chord.shape'] },
+  { name: 'BASS', slide: true, voice: ['bass.tone', 'bass.res', 'bass.decay'] },
+  { name: 'CHORD', slide: true, voice: ['chord.tone', 'chord.res', 'chord.decay'] },
 ];
 
 export const mixId = (i: number, k: 'dst' | 'phs' | 'lvl' | 'dly' | 'rev') => `mix.${i}.${k}`;
@@ -104,10 +102,7 @@ const core = (k: string, tone: [number, number, number], res: number, decay: [nu
   p({ id: `${k}.decay`, label: 'Decay', min: decay[0], max: decay[1], def: decay[2], curve: 'exp', fmt: sec }),
 ];
 
-const synthParams = (k: string, tone: number, decay: number) => [
-  ...core(k, [40, 12000, tone], 0.25, [0.03, 2, decay]),
-  p({ id: `${k}.shape`, label: 'Shape', min: 0, max: 1, def: 0.15, curve: 'lin', fmt: shape }),
-];
+const synthParams = (k: string, tone: number, decay: number) => core(k, [40, 12000, tone], 0.25, [0.03, 2, decay]);
 
 export const PARAMS: ParamDef[] = [
   // global

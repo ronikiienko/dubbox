@@ -142,8 +142,3 @@ export function saw(ph: number, dt: number): number {
   return 2 * ph - 1 - blep(ph, dt);
 }
 
-export function pulse(ph: number, dt: number, pw: number): number {
-  let ph2 = ph + 1 - pw;
-  if (ph2 >= 1) ph2 -= 1;
-  return saw(ph, dt) - saw(ph2, dt);
-}

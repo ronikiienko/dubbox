@@ -51,7 +51,7 @@ src/
 
 ### Tracks (fixed, 5)
 
-Every voice has the **same core** of per-note values. Only genuinely unique things differ.
+Every voice has **exactly the same** per-note values.
 
 | Value | Meaning everywhere | KICK | HAT | PERC | BASS / CHORD |
 |---|---|---|---|---|---|
@@ -59,12 +59,11 @@ Every voice has the **same core** of per-note values. Only genuinely unique thin
 | **Tone** | brightness: lowpass on the voice | 4-pole ladder after drive | 2× one-pole LP | 4-pole ladder | ladder cutoff (+ envelope) |
 | **Res** | resonance of the voice's filter | ladder res (boom) | HP resonance (ring) | BP Q (ringy ↔ noisy) | ladder res |
 | **Decay** | length | ✓ | ✓ | ✓ | ✓ |
-| **Shape** | waveform | — | — | — | saw → square → pulse |
 | **Dist** | saturation, loudness-matched | ✓ | ✓ | ✓ | ✓ |
 | Phs · Lvl · Dly · Rev | mixer | ✓ | ✓ | ✓ | ✓ |
 
-Row order is Tone, Res, Decay, (Shape), Dist, Phs, Lvl, Dly, Rev (signal flow), so the shared values line up on every track.
-Copying notes between tracks carries every same-named value by its knob position. Only Shape is lost on drums.
+Row order is Tone, Res, Decay, Dist, Phs, Lvl, Dly, Rev (signal flow), identical on every track.
+Copying notes between tracks carries every value by its knob position.
 
 ### Effects (global)
 
@@ -149,7 +148,7 @@ Saturation everywhere is `tanh`. Use 2× oversampling only in the synth filter a
 - Decay 20–400 ms.
 
 **SYNTH** (BASS = 1 note, CHORD = 4 notes)
-- Oscillators: `Shape` crossfades saw → square → narrow pulse (0..0.5 = saw→square, 0.5..1 = pulse width 50%→10%). PolyBLEP.
+- Oscillators: saw only (PolyBLEP). No waveform choice.
 - **Analog drift (baked in):** each oscillator gets a slow random pitch wander of ±4 cents. CHORD voices are detuned ±6 cents from each other.
 - CHORD notes: root+0, +3, +7, +10 (minor 7), one octave above BASS.
 - One **4-pole ladder filter** (tanh stages), `Cutoff` 40 Hz–12 kHz (exp), `Res` 0–0.95 (self-oscillation just short of max).

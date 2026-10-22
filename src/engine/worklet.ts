@@ -164,8 +164,8 @@ class Engine extends AudioWorkletProcessor {
       case 0: this.kick.set(R['kick.tone'], R['kick.res'], R['kick.decay']); break;
       case 1: this.hat.set(R['hat.tone'], R['hat.res'], R['hat.decay']); break;
       case 2: this.perc.set(R['perc.tone'], R['perc.res'], R['perc.decay']); break;
-      case 3: this.bass.set(R['bass.shape'], R['bass.tone'], R['bass.res'], R['bass.decay'], R.root); break;
-      case 4: this.chord.set(R['chord.shape'], R['chord.tone'], R['chord.res'], R['chord.decay'], R.root); break;
+      case 3: this.bass.set(R['bass.tone'], R['bass.res'], R['bass.decay'], R.root); break;
+      case 4: this.chord.set(R['chord.tone'], R['chord.res'], R['chord.decay'], R.root); break;
     }
   }
 

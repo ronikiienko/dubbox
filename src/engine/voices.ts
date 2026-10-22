@@ -1,4 +1,4 @@
-import { Ladder, Noise, OnePole, SVF, Smooth, TAU, decayCoef, lpCoef, mtof, pulse, saw, tanh, timeCoef } from './dsp';
+import { Ladder, Noise, OnePole, SVF, Smooth, TAU, decayCoef, lpCoef, mtof, saw, tanh, timeCoef } from './dsp';
 
 export interface Voice {
   trigger(accent: boolean, note: number): void;
@@ -124,7 +124,7 @@ export class Perc implements Voice {
 const HOLD_LEVEL = 0.3;
 const DB_PER_OCTAVE = -2; // higher notes sound louder (esp. on small speakers), so tilt them down
 
-/** Mono synth. One oscillator for BASS, four (minor 7th) for CHORD. Analog drift is baked in. */
+/** Mono saw synth. One oscillator for BASS, four (minor 7th) for CHORD. Analog drift is baked in. */
 export class Synth implements Voice {
   private ph: Float64Array;
   private dt: Float64Array;
@@ -146,7 +146,6 @@ export class Synth implements Voice {
   private glideA: number; // per-block glide coefficient (~60 ms, like a 303)
   private hold = false; // slide: sustain the envelope into the next step
   private keyGain = 1; // loudness compensation for the current pitch
-  private shape = 0;
   private cutoff = 500;
   private res = 0;
   private blockCount = 0;
@@ -168,8 +167,7 @@ export class Synth implements Voice {
   }
 
   /** Called once per block. */
-  set(shape: number, cutoff: number, res: number, decay: number, root: number) {
-    this.shape = shape;
+  set(cutoff: number, res: number, decay: number, root: number) {
     this.cutoff = cutoff;
     this.res = res;
     this.dec = decayCoef(decay, this.sr);
@@ -222,19 +220,13 @@ export class Synth implements Voice {
       this.fenv *= this.dec;
     }
 
-    const s = this.shape;
     let osc = 0;
     for (let i = 0; i < this.ph.length; i++) {
       const dt = this.dt[i];
       let ph = this.ph[i] + dt;
       if (ph >= 1) ph -= 1;
       this.ph[i] = ph;
-      if (s < 0.5) {
-        const m = s * 2;
-        osc += saw(ph, dt) * (1 - m) + pulse(ph, dt, 0.5) * m;
-      } else {
-        osc += pulse(ph, dt, 0.5 - (s - 0.5) * 0.8);
-      }
+      osc += saw(ph, dt);
     }
     osc /= Math.sqrt(this.ph.length);
 
