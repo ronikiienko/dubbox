@@ -1,4 +1,4 @@
-import { GLOBAL, PARAM_BY_ID, TRACKS, describe, pitchRange, fromIndex, lockIds, toIndex, toReal } from './params';
+import { GLOBAL, PARAM_BY_ID, RATCHET, TRACKS, mixId, describe, pitchRange, fromIndex, lockIds, toIndex, toReal } from './params';
 import {
   SONG_STEPS, STEPS_PER_BAR,
   type Project, type StepState, NO_LOCK, audible,
@@ -638,6 +638,13 @@ export function mountUI(root: HTMLElement, initial: Project) {
         if (tr.note[si]) {
           ctx.fillStyle = COLORS.text;
           ctx.fillText((tr.note[si] > 0 ? '+' : '') + tr.note[si], x + (CELL - 2) / 2, y + hh / 2);
+        }
+        const rat = RATCHET[toReal(PARAM_BY_ID[mixId(ti, 'rat')], noteValue(ti, mixId(ti, 'rat'), si))];
+        if (rat > 1) {
+          // ratchet: one tick per hit along the bottom
+          ctx.fillStyle = COLORS.text;
+          const tw = (CELL - 6) / rat;
+          for (let r = 0; r < rat; r++) ctx.fillRect(x + 2 + r * tw, y + hh - 4, Math.max(1, tw - 1), 2);
         }
         if (ids.some((id) => tr.locks[id][si] !== NO_LOCK)) {
           // this note has its own values

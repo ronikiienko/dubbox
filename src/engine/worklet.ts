@@ -1,7 +1,7 @@
 // The whole engine: clock, sequencer, voices, mixer, FX, master.
 // Runs on the audio thread. Talks to the UI only through `port` (see bridge.ts).
 
-import { GLOBAL, PARAMS, lvlGain, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
+import { GLOBAL, PARAMS, RATCHET, lvlGain, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
 import { NO_LOCK, audible, type TrackState } from '../state';
 import type { FromEngine, ToEngine } from './bridge';
 import { SVF, Smooth, timeCoef } from './dsp';
@@ -58,6 +58,11 @@ class Engine extends AudioWorkletProcessor {
   private crushes = TRACKS.map(() => new Crush(this.sr));
   private phasers = TRACKS.map(() => new Phaser(this.sr));
   private lvlT = new Float64Array(N);
+  // ratchet: extra hits still to play inside the current step
+  private ratLeft = new Int32Array(N);
+  private ratAt = new Float64Array(N); // song phase of the next extra hit
+  private ratStep = new Float64Array(N);
+  private ratSemi = new Float64Array(N); // what to retrigger (synths: semitones, drums: the step's note)
   private dlyT = new Float64Array(N);
   private revT = new Float64Array(N);
   private panT = new Float64Array(N);
@@ -128,6 +133,7 @@ class Engine extends AudioWorkletProcessor {
         for (const v of this.voices) if (v instanceof Synth) v.setHold(false);
         this.curK.fill(-1);
         this.glideOn.fill(false);
+        this.ratLeft.fill(0);
         this.phase = m.from;
         this.nextK = Math.ceil(m.from);
         this.resolveGlobal(this.nextK - 1);
@@ -211,6 +217,22 @@ class Engine extends AudioWorkletProcessor {
 
   private iv = new Float64Array(4);
 
+  /** A note with Ratchet > 1×: schedule its extra hits evenly inside the step. */
+  private armRatchet(t: number, pitch: number) {
+    const r = RATCHET[this.R[mixId(t, 'rat')]] ?? 1;
+    if (r < 2) return;
+    this.ratLeft[t] = r - 1;
+    this.ratStep[t] = 1 / r;
+    this.ratAt[t] = this.phase + 1 / r;
+    this.ratSemi[t] = pitch;
+  }
+
+  private ratchetHit(t: number) {
+    const v = this.voices[t];
+    if (v instanceof Synth) v.trigger(this.ratSemi[t], v === this.chord ? this.iv : undefined);
+    else v.trigger(this.ratSemi[t]);
+  }
+
   private triggerStep(k: number) {
     // GLOBAL values set on this step take over first, so this step's notes already use them
     let changed = false;
@@ -235,6 +257,7 @@ class Engine extends AudioWorkletProcessor {
         if (v instanceof Synth) v.setHold(false);
         continue;
       }
+      if (s) this.ratLeft[t] = 0; // a new note cancels the previous one's remaining hits
       if (v instanceof Synth) {
         // synth pitch = scale step in the current scale; CHORD also stacks its chord from there
         let semi = 0;
@@ -248,9 +271,11 @@ class Engine extends AudioWorkletProcessor {
         const slidIn = k > 0 && tr.s[k - 1] && tr.slide[k - 1];
         if (s && slidIn) v.glide(semi, iv);
         else if (s) v.trigger(semi, iv);
+        if (s) this.armRatchet(t, semi);
         v.setHold(!!s && !!tr.slide[k]);
       } else if (s) {
         v.trigger(tr.note[k]);
+        this.armRatchet(t, tr.note[k]);
       }
     }
   }
@@ -281,11 +306,19 @@ class Engine extends AudioWorkletProcessor {
     for (let s = 0; s < frames; s++) {
       if (this.playing) {
         while (this.nextK < this.total && this.phase >= this.nextK + (this.nextK & 1 ? swing : 0)) this.triggerStep(this.nextK++);
+        for (let t = 0; t < N; t++) {
+          if (this.ratLeft[t] > 0 && this.phase >= this.ratAt[t]) {
+            this.ratchetHit(t);
+            this.ratLeft[t]--;
+            this.ratAt[t] += this.ratStep[t];
+          }
+        }
         this.phase += inc;
         if (this.phase >= this.total) {
           // song end: loop to the top
           this.phase -= this.total;
           this.nextK = 0;
+          this.ratLeft.fill(0);
           this.resolveGlobal(-1);
         }
       }
