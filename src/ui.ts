@@ -47,7 +47,8 @@ const HELP: [string, string][] = [
 const THROW_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU'];
 
 // timeline geometry (px)
-const ZOOMS = [22, 16, 11, 8, 6, 4, 3, 2, 1]; // step width per zoom level (px)
+const CELL_MAX = 22; // step width fully zoomed in (px)…
+const CELL_MIN = 1; // …and fully out: the whole song is 4800 px
 const ROW_MIN = 40; // track lanes: one fixed height, open or closed (the panel scrolls if needed)
 const ROW_MAX = 40;
 const RULER_H = 20;
@@ -94,8 +95,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let scroller: HTMLElement, canvas: HTMLCanvasElement;
   let startStep = 0; // where Play starts (set by clicking the ruler)
   let follow = true; // keep the playhead in view while playing
-  let zoom = 0; // index into ZOOMS
-  let CELL = ZOOMS[zoom]; // step width now
+  let CELL = CELL_MAX; // step width now: zoom glides it toward cellTarget
+  let cellTarget = CELL_MAX;
+  let zoomAt = 0; // px from the timeline's left edge that stays put while zooming…
+  let zoomStep = 0; // …and the song position (in steps) pinned there
+  let mouseX: number | null = null; // pointer over the timeline (px from its left edge)
   let loop: { s0: number; s1: number } | null = null; // playback repeats steps s0..s1 (exclusive)
   let expanded = -1; // track showing its per-note bar rows
   let closing = -1; // track whose rows are folding away (still drawn until they reach 0)
@@ -249,16 +253,23 @@ export function mountUI(root: HTMLElement, initial: Project) {
     });
   }
 
-  /** Step to another zoom level, keeping the step under `ax` (px from the timeline's left edge) in place. */
-  function setZoom(z: number, ax = scroller.clientWidth / 2) {
-    z = clamp(z, 0, ZOOMS.length - 1);
-    if (z === zoom) return;
-    const at = (scroller.scrollLeft + ax) / CELL;
-    zoom = z;
-    CELL = ZOOMS[z];
+  /** Aim the zoom (it glides there over a few frames), around `ax` px from the timeline's left edge. */
+  function zoomBy(factor: number, ax = mouseX ?? scroller.clientWidth / 2) {
+    // pin the song position under the cursor; mid-glide at the same spot the pin is already there
+    if (CELL === cellTarget || ax !== zoomAt) zoomStep = (scroller.scrollLeft + ax) / CELL;
+    zoomAt = ax;
+    cellTarget = clamp(cellTarget * factor, CELL_MIN, CELL_MAX);
+    setFollow(false); // otherwise the playhead would pull the view away from the cursor
+  }
+
+  /** Per frame: ease the step width toward the target, keeping the step under the anchor in place. */
+  function animateZoom(dt: number) {
+    if (CELL === cellTarget) return;
+    const k = 1 - Math.exp(-dt / 0.05);
+    const next = Math.abs(cellTarget / CELL - 1) < 0.002 ? cellTarget : CELL * Math.pow(cellTarget / CELL, k); // even in log space
+    CELL = next;
     spacerEl.style.width = `${SONG_STEPS * CELL}px`;
-    scroller.scrollLeft = at * CELL - ax;
-    drawTimeline();
+    scroller.scrollLeft = zoomStep * CELL - zoomAt;
   }
 
   function setFollow(on: boolean) {
@@ -506,6 +517,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       drag = { ti, si0: si, last: si, y: e.clientY, note: tr.note[si], mode: 'pending', paint: (tr.s[si] ? 0 : 1) as StepState };
     });
     canvas.addEventListener('pointermove', (e) => {
+      mouseX = e.offsetX;
       const h0 = hit(e);
       hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
       if (selDrag) {
@@ -595,7 +607,22 @@ export function mountUI(root: HTMLElement, initial: Project) {
       ramp = null;
       pending = null;
     };
-    canvas.addEventListener('pointerleave', () => (hover = null));
+    canvas.addEventListener('pointerleave', () => {
+      hover = null;
+      mouseX = null;
+    });
+    // Safari sends trackpad pinch as gesture events, not ⌘-wheel
+    let gestureScale = 1;
+    scroller.addEventListener('gesturestart', (e) => {
+      e.preventDefault();
+      gestureScale = 1;
+    });
+    scroller.addEventListener('gesturechange', (e) => {
+      e.preventDefault();
+      const scale = (e as unknown as { scale: number }).scale;
+      zoomBy(scale / gestureScale);
+      gestureScale = scale;
+    });
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
 
@@ -610,17 +637,13 @@ export function mountUI(root: HTMLElement, initial: Project) {
       }
     });
 
-    // ⌘/Ctrl-wheel (and trackpad pinch) = zoom around the mouse, one level per notch.
+    // ⌘/Ctrl-wheel (and trackpad pinch) = smooth zoom around the mouse.
     // Vertical wheel over an active step = note. Otherwise wheel scrolls the timeline.
-    let zoomAcc = 0;
     scroller.addEventListener('wheel', (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        zoomAcc += e.deltaY;
-        if (Math.abs(zoomAcc) >= 30) {
-          setZoom(zoom + Math.sign(zoomAcc), e.clientX - scroller.getBoundingClientRect().left);
-          zoomAcc = 0;
-        }
+        // pinch sends many small deltas, a mouse wheel a few big ones: cap each so a notch ≈ ×1.6
+        zoomBy(Math.exp(-clamp(e.deltaY, -50, 50) * 0.01), e.clientX - scroller.getBoundingClientRect().left);
         return;
       }
       const vertical = Math.abs(e.deltaY) > Math.abs(e.deltaX) && !e.shiftKey;
@@ -721,9 +744,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const detail = CELL >= 16;
       for (let si = first; si <= last && !g; si++) {
         const st = tr.s[si];
-        const x = si * CELL - x0 + gap;
+        const x = Math.round(si * CELL - x0) + gap; // whole pixels: crisp at any zoom
         ctx.fillStyle = st ? COLORS.accentDim : si % 4 === 0 && CELL >= 4 ? COLORS.beat : COLORS.cell;
-        ctx.fillRect(x, y, CELL - 2 * gap, hh);
+        ctx.fillRect(x, y, Math.round((si + 1) * CELL - x0) - x - gap, hh);
         if (!st || CELL < 11) continue;
         if (tr.slide[si]) {
           // slide: a tie from this step into the next
@@ -1029,6 +1052,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let lastFrame = performance.now();
   function frame(now: number) {
     animateRows(now, Math.min(0.1, (now - lastFrame) / 1000));
+    animateZoom(Math.min(0.1, (now - lastFrame) / 1000));
     lastFrame = now;
     if (t.playing) {
       const bpm = toReal(PARAM_BY_ID.tempo, noteValue(GLOBAL, 'tempo', Math.floor(t.phase)));
@@ -1085,8 +1109,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
     }
     if (e.code === 'KeyF') setFollow(!follow);
     if (e.code === 'KeyL') toggleLoop();
-    if (e.code === 'Minus') setZoom(zoom + 1);
-    if (e.code === 'Equal') setZoom(zoom - 1);
+    if (e.code === 'Minus') zoomBy(1 / 1.6);
+    if (e.code === 'Equal') zoomBy(1.6);
     const ti = THROW_KEYS.indexOf(e.code);
     if (ti >= 0) setThrow(ti, true);
   });
