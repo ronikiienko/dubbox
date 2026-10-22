@@ -1,0 +1,281 @@
+// The whole engine: clock, sequencer, voices, mixer, FX, master.
+// Runs on the audio thread. Talks to the UI only through `port` (see bridge.ts).
+
+import { PARAMS, PARAM_BY_ID, SWING, TRACKS, fromIndex, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
+import { NO_LOCK, audible, type TrackState } from '../state';
+import type { FromEngine, ToEngine } from './bridge';
+import { Smooth, timeCoef } from './dsp';
+import { Drive, Glue, Phaser, Reverb, Tape, TapeDelay } from './fx';
+import { Hat, Kick, Perc, Synth, type Voice } from './voices';
+
+declare const sampleRate: number;
+declare function registerProcessor(name: string, ctor: unknown): void;
+declare class AudioWorkletProcessor {
+  readonly port: MessagePort;
+}
+
+const N = TRACKS.length;
+const DELAY_SIXTEENTHS = [1, 2, 3, 4, 6];
+const REC_CHUNK = 8192;
+
+class Engine extends AudioWorkletProcessor {
+  private sr = sampleRate;
+
+  // state mirrored from the UI
+  private norm: Record<string, number> = {};
+  private tracks: TrackState[] = [];
+  private throws = new Array<boolean>(N).fill(false);
+  private R: Record<string, number> = {}; // real values for this block
+
+  // per-note locks: each track plays with the values of its current note
+  private lockDefs = TRACKS.map((_, i) => lockIds(i).map((id) => PARAM_BY_ID[id]));
+  private curK = new Int32Array(N).fill(-1); // step of the note now sounding, -1 = none yet
+  private glideOn = new Array<boolean>(N).fill(false); // slid note: values glide into the next note
+
+  // transport
+  private playing = false;
+  private phase = 0; // song position in 16th steps
+  private nextK = 0; // next step to trigger
+  private total = 0; // song length in steps
+  private posCounter = 0;
+
+  // voices + mixer
+  private kick = new Kick(this.sr);
+  private hat = new Hat(this.sr);
+  private perc = new Perc(this.sr);
+  private bass = new Synth(this.sr, 29, [0], [0]);
+  private chord = new Synth(this.sr, 41, [0, 3, 7, 10], [-6, 2, -2, 6]);
+  private voices: Voice[] = [this.kick, this.hat, this.perc, this.bass, this.chord];
+  private vals = new Float64Array(N);
+  private drives = TRACKS.map(() => new Drive(this.sr));
+  private phasers = TRACKS.map(() => new Phaser(this.sr));
+  private lvlT = new Float64Array(N);
+  private dlyT = new Float64Array(N);
+  private revT = new Float64Array(N);
+  private lvl: Smooth[];
+  private dly: Smooth[];
+  private rev: Smooth[];
+  private vol: Smooth;
+
+  // fx + master
+  private delay = new TapeDelay(this.sr);
+  private reverb = new Reverb(this.sr);
+  private glue = new Glue(this.sr);
+  private tape = new Tape(this.sr);
+
+  // wav recording
+  private recOn = false;
+  private recL = new Float32Array(REC_CHUNK);
+  private recR = new Float32Array(REC_CHUNK);
+  private recN = 0;
+
+  constructor() {
+    super();
+    const a = timeCoef(0.02, this.sr);
+    this.lvl = TRACKS.map(() => new Smooth(0, a));
+    this.dly = TRACKS.map(() => new Smooth(0, a));
+    this.rev = TRACKS.map(() => new Smooth(0, a));
+    this.vol = new Smooth(0, a);
+    for (const d of PARAMS) this.norm[d.id] = d.defN;
+    this.port.onmessage = (e: MessageEvent<ToEngine>) => this.onMessage(e.data);
+  }
+
+  private post(msg: FromEngine, transfer: Transferable[] = []) {
+    this.port.postMessage(msg, transfer);
+  }
+
+  private onMessage(m: ToEngine) {
+    switch (m.t) {
+      case 'init':
+        Object.assign(this.norm, m.project.params);
+        this.tracks = m.project.tracks;
+        this.total = this.tracks[0].s.length;
+        break;
+      case 'param':
+        this.norm[m.id] = m.v;
+        break;
+      case 'step':
+        this.tracks[m.i].s[m.si] = m.s;
+        this.tracks[m.i].note[m.si] = m.note;
+        this.tracks[m.i].slide[m.si] = m.slide;
+        break;
+      case 'lock':
+        this.tracks[m.i].locks[m.id][m.si] = m.v;
+        break;
+      case 'flags':
+        this.tracks[m.i].mute = m.mute;
+        this.tracks[m.i].solo = m.solo;
+        break;
+      case 'throw':
+        this.throws[m.i] = m.on;
+        break;
+      case 'play':
+        this.playing = m.on;
+        // release slide holds, otherwise a held note rings forever once the clock stops
+        for (const v of this.voices) if (v instanceof Synth) v.setHold(false);
+        this.curK.fill(-1);
+        this.glideOn.fill(false);
+        this.phase = m.from;
+        this.nextK = Math.ceil(m.from);
+        break;
+      case 'rec':
+        if (!m.on && this.recOn) this.flushRec(true);
+        this.recOn = m.on;
+        this.recN = 0;
+        break;
+    }
+  }
+
+  /** Normalized → snapped → real units. Once per block. */
+  private updateParams() {
+    for (const d of PARAMS) this.R[d.id] = toReal(d, snap(d, this.norm[d.id]));
+    for (let t = 0; t < N; t++) this.applyTrack(t);
+    const R = this.R;
+    const stepSamples = (this.sr * 60) / R.tempo / 4;
+    this.delay.set(DELAY_SIXTEENTHS[R['delay.time']] * stepSamples, R['delay.fbk'], R['delay.tone']);
+    this.reverb.set(R['reverb.size']);
+    this.tape.set(R['tape.age']);
+  }
+
+  /** Locked value of param `d` at step k, or the knob's value. Normalized. */
+  private lockValue(t: number, d: ParamDef, k: number): number {
+    const v = k >= 0 ? this.tracks[t].locks[d.id][k] : NO_LOCK;
+    return v === NO_LOCK ? snap(d, this.norm[d.id]) : fromIndex(d, v);
+  }
+
+  /** Resolve track t's strip for its current note (gliding if slid) and push it to voice + mixer. */
+  private applyTrack(t: number) {
+    const R = this.R;
+    const k = this.curK[t];
+    const glide = this.glideOn[t];
+    const frac = glide ? Math.min(1, Math.max(0, this.phase - k)) : 0;
+    for (const d of this.lockDefs[t]) {
+      let n = this.lockValue(t, d, k);
+      if (glide) n += (this.lockValue(t, d, k + 1) - n) * frac;
+      R[d.id] = toReal(d, n);
+    }
+
+    this.lvlT[t] = audible(this.tracks, t) ? R[mixId(t, 'lvl')] : 0;
+    this.dlyT[t] = this.throws[t] ? 1 : R[mixId(t, 'dly')];
+    this.revT[t] = R[mixId(t, 'rev')];
+    this.drives[t].set(R[mixId(t, 'dst')]);
+    this.phasers[t].set(R[mixId(t, 'phs')]);
+    switch (t) {
+      case 0: this.kick.set(R['kick.tone'], R['kick.res'], R['kick.decay']); break;
+      case 1: this.hat.set(R['hat.tone'], R['hat.res'], R['hat.decay']); break;
+      case 2: this.perc.set(R['perc.tone'], R['perc.res'], R['perc.decay']); break;
+      case 3: this.bass.set(R['bass.shape'], R['bass.tone'], R['bass.res'], R['bass.decay'], R.root); break;
+      case 4: this.chord.set(R['chord.shape'], R['chord.tone'], R['chord.res'], R['chord.decay'], R.root); break;
+    }
+  }
+
+  private triggerStep(k: number) {
+    for (let t = 0; t < N; t++) {
+      const tr = this.tracks[t];
+      const v = this.voices[t];
+      const s = tr.s[k];
+      if (s) {
+        // this note's values take over the track until the next note
+        this.curK[t] = k;
+        this.glideOn[t] = !!tr.slide[k] && k + 1 < this.total && !!tr.s[k + 1];
+        this.applyTrack(t);
+      }
+      if (!audible(this.tracks, t)) {
+        if (v instanceof Synth) v.setHold(false);
+        continue;
+      }
+      if (v instanceof Synth) {
+        // 303 slide: a slid step holds its note and glides into this one instead of retriggering
+        const slidIn = k > 0 && tr.s[k - 1] && tr.slide[k - 1];
+        if (s && slidIn) v.glide(s === 2, tr.note[k]);
+        else if (s) v.trigger(s === 2, tr.note[k]);
+        v.setHold(!!s && !!tr.slide[k]);
+      } else if (s) {
+        v.trigger(s === 2, tr.note[k]);
+      }
+    }
+  }
+
+  private flushRec(end: boolean) {
+    if (this.recN > 0) {
+      const l = this.recL.slice(0, this.recN);
+      const r = this.recR.slice(0, this.recN);
+      this.post({ t: 'audio', l, r }, [l.buffer, r.buffer]);
+      this.recN = 0;
+    }
+    if (end) this.post({ t: 'recEnd', sampleRate: this.sr });
+  }
+
+  process(_in: Float32Array[][], outputs: Float32Array[][]): boolean {
+    const outL = outputs[0][0];
+    const outR = outputs[0][1] ?? outL;
+    const frames = outL.length;
+    if (this.tracks.length === 0) return true;
+
+    this.updateParams();
+    const R = this.R;
+    const inc = R.tempo / 60 / this.sr * 4;
+    const swing = (SWING[R.swing] - 50) / 50;
+    const vol = R.volume;
+    const vals = this.vals;
+
+    for (let s = 0; s < frames; s++) {
+      if (this.playing) {
+        while (this.nextK < this.total && this.phase >= this.nextK + (this.nextK & 1 ? swing : 0)) this.triggerStep(this.nextK++);
+        this.phase += inc;
+        if (this.phase >= this.total) {
+          // song end: loop to the top
+          this.phase -= this.total;
+          this.nextK = 0;
+        }
+      }
+
+      for (let t = 0; t < N; t++) vals[t] = this.voices[t].process();
+
+      // per track: dist → phaser → fader → post-fader sends
+      let dry = 0, dIn = 0, rIn = 0;
+      for (let t = 0; t < N; t++) {
+        const g = this.lvl[t].next(this.lvlT[t]);
+        const v = this.phasers[t].process(this.drives[t].process(vals[t])) * g;
+        dry += v;
+        dIn += v * this.dly[t].next(this.dlyT[t]);
+        rIn += v * this.rev[t].next(this.revT[t]);
+      }
+
+      this.delay.process(dIn);
+      const dl = this.delay.l, dr = this.delay.r;
+      this.reverb.process(rIn + 0.125 * (dl + dr));
+
+      this.glue.process(dry + dl + this.reverb.l, dry + dr + this.reverb.r);
+      this.tape.process(this.glue.l, this.glue.r);
+
+      const g = this.vol.next(vol);
+      const l = safety(this.tape.l * g);
+      const r = safety(this.tape.r * g);
+      outL[s] = l;
+      outR[s] = r;
+
+      if (this.recOn) {
+        this.recL[this.recN] = l;
+        this.recR[this.recN] = r;
+        if (++this.recN === REC_CHUNK) this.flushRec(false);
+      }
+    }
+
+    this.posCounter += frames;
+    if (this.posCounter >= this.sr / 30) {
+      this.posCounter = 0;
+      this.post({ t: 'pos', phase: this.phase });
+    }
+    return true;
+  }
+}
+
+/** Transparent below 0.9, soft-clips above. */
+function safety(x: number): number {
+  const a = Math.abs(x);
+  if (a <= 0.9) return x;
+  return Math.sign(x) * (0.9 + 0.1 * Math.tanh((a - 0.9) / 0.1));
+}
+
+registerProcessor('dubbox', Engine);
