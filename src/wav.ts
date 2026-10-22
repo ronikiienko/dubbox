@@ -1,13 +1,15 @@
 // Collects recorded chunks from the engine and downloads a 24-bit stereo WAV or a 320 kbps MP3.
+// (The VIDEO format records elsewhere: see video.ts.)
 
 import { Mp3Encoder } from '@breezystack/lamejs';
 
-export type RecFormat = 'wav' | 'mp3';
+export type RecFormat = 'wav' | 'mp3' | 'video';
+const FORMATS: RecFormat[] = ['wav', 'mp3', 'video'];
 
 const MP3_RATES = [32000, 44100, 48000]; // what LAME takes as-is; anything else falls back to WAV
 
 export class Recorder {
-  format: RecFormat = localStorage.getItem('dubbox.recFormat') === 'mp3' ? 'mp3' : 'wav';
+  format: RecFormat = FORMATS.find((f) => f === localStorage.getItem('dubbox.recFormat')) ?? 'wav';
 
   setFormat(f: RecFormat) {
     this.format = f;
@@ -79,7 +81,7 @@ function mp3(l: Float32Array[], r: Float32Array[], sampleRate: number): Uint8Arr
   return out;
 }
 
-function download(data: BlobPart | BlobPart[], type: string, ext: string) {
+export function download(data: BlobPart | BlobPart[], type: string, ext: string) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(Array.isArray(data) ? data : [data], { type }));
   a.download = `dubbox-${new Date().toISOString().slice(0, 16).replace(':', '')}.${ext}`;

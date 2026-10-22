@@ -4,8 +4,9 @@ import {
   type Project, type StepState, NO_LOCK, audible,
   exportProject, emptyProject, importProject, scheduleSave,
 } from './state';
-import { onEngine, send, startEngine } from './engine/bridge';
+import { audioStream, onEngine, send, startEngine } from './engine/bridge';
 import { Recorder } from './wav';
+import { VideoRecorder } from './video';
 import { type Clip, type Region, type Snapshot, clear, copy, paste, restore, snapshot } from './edit';
 
 // ---- helpers ------------------------------------------------------------
@@ -89,6 +90,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   // Transport mirror: the engine reports its phase ~30x/s, the UI extrapolates between reports.
   const t = { playing: false, phase: 0, enginePhase: 0, posAt: 0, rec: false, recStart: 0 };
   const recorder = new Recorder();
+  const video = new VideoRecorder();
   const throws = new Set<number>();
 
   let heads: HTMLElement[] = [];
@@ -945,12 +947,29 @@ export function mountUI(root: HTMLElement, initial: Project) {
   }
 
   function setRec(on: boolean) {
-    t.rec = on;
-    t.recStart = performance.now();
+    if (recorder.format === 'video') return setVideoRec(on);
+    recLit(on);
     if (on) startEngine(() => p).then(() => send({ t: 'rec', on: t.rec }));
     else send({ t: 'rec', on });
+  }
+
+  function recLit(on: boolean) {
+    t.rec = on;
+    t.recStart = performance.now();
     recBtn.classList.toggle('lit', on);
     if (!on) recBtn.textContent = '● REC';
+  }
+
+  /** VIDEO: the browser asks which screen/tab to share (pick this tab), then it records with the app's sound. */
+  async function setVideoRec(on: boolean) {
+    if (!on) {
+      video.stop();
+      recLit(false);
+      return;
+    }
+    // both asked for inside the click: the share prompt and the audio engine need the gesture
+    const ok = await video.start(startEngine(() => p).then(audioStream), () => recLit(false));
+    if (ok) recLit(true);
   }
 
   function setThrow(i: number, on: boolean) {
@@ -987,10 +1006,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
     playBtn = button('▶ PLAY', 'btn', () => setPlaying(!t.playing));
     recBtn = button('● REC', 'btn rec', () => setRec(!t.rec));
     const fmtBtn = button(recorder.format.toUpperCase(), 'btn small', () => {
-      recorder.setFormat(recorder.format === 'wav' ? 'mp3' : 'wav');
+      if (t.rec) return; // not mid-recording
+      recorder.setFormat(recorder.format === 'wav' ? 'mp3' : recorder.format === 'mp3' ? 'video' : 'wav');
       fmtBtn.textContent = recorder.format.toUpperCase();
     });
-    fmtBtn.title = 'REC saves as WAV (24-bit) or MP3 (320 kbps)';
+    fmtBtn.title = 'REC saves as WAV (24-bit), MP3 (320 kbps) or VIDEO (screen + the app\'s sound; pick this tab when asked)';
     followBtn = button('FOLLOW', 'btn small lit', () => setFollow(!follow));
     followBtn.title = 'keep the playhead in view (F)';
     // fullscreen: the app fills the screen, no browser bars (Esc leaves)

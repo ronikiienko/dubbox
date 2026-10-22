@@ -37,6 +37,7 @@ src/
   state.ts         project model, defaults, autosave, save/load JSON
   ui.ts            render screen, knob + step widgets, keyboard
   wav.ts           encode recorded float chunks to WAV or MP3
+  video.ts         VIDEO recording: screen capture + engine audio → MP4/WebM
   style.css
   engine/
     worklet.ts     AudioWorkletProcessor: clock, sequencer, mixing, routing
@@ -291,6 +292,7 @@ worklet → main:
 ## 8. Recording
 
 - **REC** button: records the master output in realtime while you perform. The worklet streams chunks, and on stop it encodes a **24-bit WAV** or a **320 kbps MP3** (the WAV/MP3 toggle next to REC, remembered in localStorage; LAME via `@breezystack/lamejs`) and downloads it (`dubbox-<date>.wav` / `.mp3`). MP3 needs a 32/44.1/48 kHz context, otherwise it falls back to WAV.
+- **VIDEO** (third REC format): REC asks the browser to share a screen/tab (Chrome offers the current tab first; pick it), then records that picture with the engine's own audio taken straight from the graph (a `MediaStreamAudioDestinationNode`, so it's clean, no mic) via `MediaRecorder`: MP4 (H.264 + AAC) where the browser can encode it, otherwise WebM; 60 fps, 8 Mbit/s video, 256 kbit/s audio. Stops with REC or the browser's own "Stop sharing". The format can't change mid-recording. Code: `video.ts`.
 - No offline render. The performance *is* the arrangement.
 
 ---

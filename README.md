@@ -22,7 +22,7 @@ The rest is simplified the same way. There's no piano roll, and I tried to add o
 - **One linear song** on a 16th-step grid. No patterns: you draw the whole track on one timeline.
 - **No knobs, no automation lanes.** Click a track name to open its value rows, grouped as Note · Filter · Color · Mix · Sends, and set them per note.
 - **Dub tools:** tape delay with hold-a-key throws, room/spring reverb, tape saturation, mute/solo for live arranging.
-- **REC** records what you hear to WAV or MP3.
+- **REC** records what you hear to WAV or MP3, or a **VIDEO** of the app with its sound (pick this tab when the browser asks).
 
 ## Basics
 

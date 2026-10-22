@@ -41,6 +41,17 @@ export function startEngine(getProject: () => Project): Promise<void> {
   return starting.then(() => ctx!.resume());
 }
 
+let tap: MediaStreamAudioDestinationNode | null = null;
+
+/** The engine's output as a MediaStream (for video recording). Call after startEngine resolves. */
+export function audioStream(): MediaStream {
+  if (!tap) {
+    tap = ctx!.createMediaStreamDestination();
+    node!.connect(tap);
+  }
+  return tap.stream;
+}
+
 /** Dropped silently until the engine exists; `init` carries the full state when it starts. */
 export function send(msg: ToEngine) {
   node?.port.postMessage(msg);
