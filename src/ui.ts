@@ -312,15 +312,22 @@ export function mountUI(root: HTMLElement, initial: Project) {
     return y;
   };
 
+  /**
+   * Match the canvas to the timeline. Resizing a canvas wipes it, so this only touches the size
+   * when it really changed, and redraws right away so a blank frame never reaches the screen.
+   */
   function sizeCanvas() {
     const dpr = window.devicePixelRatio || 1;
-    const w = scroller.clientWidth, hh = totalH();
+    const w = scroller.clientWidth, hh = Math.round(totalH());
+    const pw = Math.round(w * dpr), ph = Math.round(hh * dpr);
+    if (canvas.width === pw && canvas.height === ph) return;
     spacerEl.style.height = `${hh}px`;
-    canvas.width = w * dpr;
-    canvas.height = hh * dpr;
+    canvas.width = pw;
+    canvas.height = ph;
     canvas.style.width = `${w}px`;
     canvas.style.height = `${hh}px`;
     canvas.getContext('2d')!.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawTimeline();
   }
 
   const sameRow = (a: RowRef, b: RowRef) => a?.ti === b?.ti && a?.sub === b?.sub;
