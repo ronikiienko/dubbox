@@ -990,6 +990,13 @@ export function mountUI(root: HTMLElement, initial: Project) {
     fmtBtn.title = 'REC saves as WAV (24-bit) or MP3 (320 kbps)';
     followBtn = button('FOLLOW', 'btn small lit', () => setFollow(!follow));
     followBtn.title = 'keep the playhead in view (F)';
+    // fullscreen: the app fills the screen, no browser bars (Esc leaves)
+    const fullBtn = button('⛶', 'btn small' + (document.fullscreenElement ? ' lit' : ''), () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen().catch(() => {});
+    });
+    fullBtn.title = 'fullscreen';
+    document.onfullscreenchange = () => fullBtn.classList.toggle('lit', !!document.fullscreenElement);
     loopBtn = button('LOOP', 'btn small' + (loop ? ' lit' : ''), toggleLoop);
     loopBtn.title = 'loop the selection, or the current bar (L)';
     const file = h('input');
@@ -1008,6 +1015,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       h('div', 'logo', 'DUBBOX'),
       playBtn, recBtn, fmtBtn, followBtn, loopBtn,
       h('div', 'spacer'),
+      fullBtn,
       helpBtn = button('?', 'btn small help-btn', () => setHelp(!helpOpen)),
       button('SAVE', 'btn small', () => exportProject(p)),
       button('LOAD', 'btn small', () => file.click()),
