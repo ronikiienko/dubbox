@@ -256,13 +256,16 @@ export function mountUI(root: HTMLElement, initial: Project) {
     });
   }
 
-  /** Aim the zoom (it glides there over a few frames), around `ax` px from the timeline's left edge. */
+  /**
+   * Aim the zoom (it glides there over a few frames), around `ax` px from the timeline's left edge.
+   * While following the playhead, it zooms around the playhead instead (follow keeps it in place).
+   */
   function zoomBy(factor: number, ax = mouseX ?? scroller.clientWidth / 2) {
-    // pin the song position under the cursor; mid-glide at the same spot the pin is already there
+    if (follow && t.playing) ax = scroller.clientWidth * 0.25;
+    // pin the song position under the anchor; mid-glide at the same spot the pin is already there
     if (CELL === cellTarget || ax !== zoomAt) zoomStep = (scroller.scrollLeft + ax) / CELL;
     zoomAt = ax;
     cellTarget = clamp(cellTarget * factor, CELL_MIN, CELL_MAX);
-    setFollow(false); // otherwise the playhead would pull the view away from the cursor
   }
 
   /** Per frame: ease the step width toward the target, keeping the step under the anchor in place. */
