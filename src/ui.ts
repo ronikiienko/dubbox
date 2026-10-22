@@ -367,19 +367,13 @@ export function mountUI(root: HTMLElement, initial: Project) {
     heads.forEach((el) => (el.style.height = `${mainH}px`));
   }
 
-  const sameRow = (a: RowRef, b: RowRef) => a?.ti === b?.ti && a?.sub === b?.sub;
-
-  /** ⌥ held: magnify the row under the mouse. Inside the lens it stays put; mid-drag it never moves. */
-  function updateLens(y?: number) {
+  /** ⌥ held: magnify the row under the mouse, and keep that row until ⌥ is let go (and any drag ends). */
+  function updateLens() {
     if (gesture) return;
-    if (!altHeld || !hover || hover.sub < 0) {
-      if (!(altHeld && y !== undefined && inLens(y))) hot = null;
-      return;
-    }
-    if (y !== undefined && inLens(y)) return;
-    const r = { ti: hover.ti, sub: hover.sub };
-    if (!sameRow(r, hot)) hot = r;
+    if (!altHeld) hot = null;
+    else if (!hot && hover && hover.sub >= 0) hot = { ti: hover.ti, sub: hover.sub };
   }
+
 
   /** Per frame: ease every row's height toward its target. */
   function animateRows(_now: number, dt: number) {
@@ -551,7 +545,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       mouseX = e.offsetX;
       const h0 = hit(e);
       hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
-      updateLens(e.offsetY);
+      updateLens();
       if (selDrag) {
         if (h0.si !== selDrag.s0 || h0.ti !== selDrag.t0) selDrag.moved = true;
         if (selDrag.moved || !selDrag.ruler) updateSel(h0.si, h0.ti);
