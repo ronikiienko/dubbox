@@ -41,12 +41,13 @@ const HELP: [string, string][] = [
   ['D', 'dice selection / hovered'],
   ['⌘Z / ⇧⌘Z', 'undo / redo'],
   ['wheel', 'scroll'],
+  ['⌘-wheel / pinch · − =', 'zoom out / in'],
 ];
 
 const THROW_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU'];
 
 // timeline geometry (px)
-const CELL = 22;
+const ZOOMS = [22, 16, 11, 8, 6, 4, 3, 2, 1]; // step width per zoom level (px)
 const ROW_MIN = 40; // track lanes: one fixed height, open or closed (the panel scrolls if needed)
 const ROW_MAX = 40;
 const RULER_H = 20;
@@ -93,6 +94,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let scroller: HTMLElement, canvas: HTMLCanvasElement;
   let startStep = 0; // where Play starts (set by clicking the ruler)
   let follow = true; // keep the playhead in view while playing
+  let zoom = 0; // index into ZOOMS
+  let CELL = ZOOMS[zoom]; // step width now
   let loop: { s0: number; s1: number } | null = null; // playback repeats steps s0..s1 (exclusive)
   let expanded = -1; // track showing its per-note bar rows
   let closing = -1; // track whose rows are folding away (still drawn until they reach 0)
@@ -244,6 +247,18 @@ export function mountUI(root: HTMLElement, initial: Project) {
         }
       }
     });
+  }
+
+  /** Step to another zoom level, keeping the step under `ax` (px from the timeline's left edge) in place. */
+  function setZoom(z: number, ax = scroller.clientWidth / 2) {
+    z = clamp(z, 0, ZOOMS.length - 1);
+    if (z === zoom) return;
+    const at = (scroller.scrollLeft + ax) / CELL;
+    zoom = z;
+    CELL = ZOOMS[z];
+    spacerEl.style.width = `${SONG_STEPS * CELL}px`;
+    scroller.scrollLeft = at * CELL - ax;
+    drawTimeline();
   }
 
   function setFollow(on: boolean) {
@@ -595,8 +610,19 @@ export function mountUI(root: HTMLElement, initial: Project) {
       }
     });
 
+    // ⌘/Ctrl-wheel (and trackpad pinch) = zoom around the mouse, one level per notch.
     // Vertical wheel over an active step = note. Otherwise wheel scrolls the timeline.
+    let zoomAcc = 0;
     scroller.addEventListener('wheel', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        zoomAcc += e.deltaY;
+        if (Math.abs(zoomAcc) >= 30) {
+          setZoom(zoom + Math.sign(zoomAcc), e.clientX - scroller.getBoundingClientRect().left);
+          zoomAcc = 0;
+        }
+        return;
+      }
       const vertical = Math.abs(e.deltaY) > Math.abs(e.deltaX) && !e.shiftKey;
       if (vertical && e.target === canvas) {
         const { si, ti, sub } = hit(e);
@@ -629,7 +655,10 @@ export function mountUI(root: HTMLElement, initial: Project) {
     // ruler: bar numbers + start marker
     ctx.font = '12px ui-monospace, Menlo, monospace';
     ctx.textBaseline = 'middle';
-    for (let b = Math.floor(first / STEPS_PER_BAR); b * STEPS_PER_BAR <= last; b++) {
+    // zoomed out: a line and a number every 2, 4, 8… bars so they don't crowd
+    let every = 1;
+    while (every * STEPS_PER_BAR * CELL < 36) every *= 2;
+    for (let b = Math.floor(first / STEPS_PER_BAR / every) * every; b * STEPS_PER_BAR <= last; b += every) {
       const x = b * STEPS_PER_BAR * CELL - x0;
       ctx.fillStyle = COLORS.line;
       ctx.fillRect(x, 0, 1, H);
@@ -683,22 +712,25 @@ export function mountUI(root: HTMLElement, initial: Project) {
             })
             .join(' · ');
           ctx.fillStyle = COLORS.text;
-          ctx.fillText(text, x + 5, y + hh / 2 - 6);
+          if (CELL >= 6) ctx.fillText(text, x + 5, y + hh / 2 - 6);
         }
         ctx.textAlign = 'center';
       }
+      // zoomed out: cells touch, and the small print goes
+      const gap = CELL >= 6 ? 1 : 0;
+      const detail = CELL >= 16;
       for (let si = first; si <= last && !g; si++) {
         const st = tr.s[si];
-        const x = si * CELL - x0 + 1;
-        ctx.fillStyle = st ? COLORS.accentDim : si % 4 === 0 ? COLORS.beat : COLORS.cell;
-        ctx.fillRect(x, y, CELL - 2, hh);
-        if (!st) continue;
+        const x = si * CELL - x0 + gap;
+        ctx.fillStyle = st ? COLORS.accentDim : si % 4 === 0 && CELL >= 4 ? COLORS.beat : COLORS.cell;
+        ctx.fillRect(x, y, CELL - 2 * gap, hh);
+        if (!st || CELL < 11) continue;
         if (tr.slide[si]) {
           // slide: a tie from this step into the next
           ctx.fillStyle = COLORS.text;
           ctx.fillRect(x + CELL / 2, y + hh - 4, CELL, 3);
         }
-        if (tr.note[si]) {
+        if (tr.note[si] && detail) {
           ctx.fillStyle = COLORS.text;
           ctx.fillText((tr.note[si] > 0 ? '+' : '') + tr.note[si], x + (CELL - 2) / 2, y + hh / 2);
         }
@@ -730,7 +762,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const pad = padTop(ti, j);
         const span = barSpan(ti, j);
         const bottom = rowTop + height - padBottom(ti, j);
-        const showValues = isHot(ti, j);
+        const showValues = isHot(ti, j) && CELL >= 16;
+        const inset = CELL >= 11 ? 4 : CELL >= 4 ? 1 : 0;
         const gap = gapH(ti, j);
         if (gap) {
           // group divider
@@ -756,10 +789,10 @@ export function mountUI(root: HTMLElement, initial: Project) {
             // grows up/down from the centre line (e.g. Pan: up = right, down = left)
             const mid = rowTop + pad + span / 2;
             const bh = Math.max(2, Math.abs(n - 0.5) * span);
-            ctx.fillRect(g ? x : x + 4, n >= 0.5 ? mid - bh : mid, g ? CELL : CELL - 8, bh);
+            ctx.fillRect(g ? x : x + inset, n >= 0.5 ? mid - bh : mid, g ? CELL : CELL - 2 * inset, bh);
           } else {
             const bh = Math.max(2, n * span);
-            ctx.fillRect(g ? x : x + 4, bottom - bh, g ? CELL : CELL - 8, bh); // GLOBAL: one continuous fill
+            ctx.fillRect(g ? x : x + inset, bottom - bh, g ? CELL : CELL - 2 * inset, bh); // GLOBAL: one continuous fill
           }
           if (showValues && (!g || locked || si === first)) {
             // position as a number: 0–8, or −4…+4 around the centre for bipolar values
@@ -1052,6 +1085,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
     }
     if (e.code === 'KeyF') setFollow(!follow);
     if (e.code === 'KeyL') toggleLoop();
+    if (e.code === 'Minus') setZoom(zoom + 1);
+    if (e.code === 'Equal') setZoom(zoom - 1);
     const ti = THROW_KEYS.indexOf(e.code);
     if (ti >= 0) setThrow(ti, true);
   });

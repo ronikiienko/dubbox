@@ -316,6 +316,7 @@ worklet → main:
 - **Ruler click** = set the start marker (bar-quantized). Play starts there, and Stop returns there.
 - **FOLLOW** (key `F`): while playing, the view scrolls smoothly with the playhead at 25% from the left. Any manual scroll turns it off.
 - Vertical mouse wheel scrolls the timeline horizontally (except over an active synth step, where it changes the note).
+- **Zoom** (horizontal only, stepped): ⌘/Ctrl-wheel or trackpad pinch zooms around the mouse; `−` / `=` around the middle. Step width 22 → 16 → 11 → 8 → 6 → 4 → 3 → 2 → 1 px (fully out, the whole 300-bar song is 4800 px). Zoomed out, cells touch and the small print hides (note numbers and value labels below 16 px; slide, ratchet and value dots below 11 px; GLOBAL labels below 6 px), and the ruler numbers every 2, 4, 8… bars. Editing works the same at any zoom.
 - Knobs: vertical drag (Shift = fine), value tooltip while dragging, double-click = reset.
 - Knob visual: arc = base, dot = live value (shows throws).
 - Colors: near-black background, off-white text, one accent color (amber) for active/playhead, red only for REC.
