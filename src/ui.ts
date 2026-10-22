@@ -831,6 +831,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     // shortcuts: hidden until asked for (? button or key), floating over the timeline
     help = h('div', 'help');
     help.hidden = !helpOpen;
+    helpBtn.classList.toggle('lit', helpOpen);
     for (const [key, what] of HELP) {
       const item = h('div');
       item.append(h('span', 'key', key), what);
