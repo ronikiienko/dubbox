@@ -45,8 +45,8 @@ const THROW_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY'];
 
 // timeline geometry (px)
 const CELL = 22;
-const ROW_MIN = 34; // track lanes are ROW_MAX tall, shrinking toward ROW_MIN only to fit an open track
-const ROW_MAX = 52;
+const ROW_MIN = 40; // track lanes: one fixed height, open or closed (the panel scrolls if needed)
+const ROW_MAX = 40;
 const RULER_H = 20;
 const PAD = 9;
 const SUB_H = 22; // per-note bar rows of an expanded track
