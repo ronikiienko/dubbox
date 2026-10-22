@@ -83,13 +83,23 @@ header {
 .scroller canvas { position: sticky; left: 0; display: block; cursor: pointer; touch-action: none; }
 
 .help {
-  flex: none;
+  position: fixed;
+  right: 24px;
+  top: 64px;
+  z-index: 10;
+  width: min(640px, calc(100vw - 48px));
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 2px 18px;
-  padding: 0 14px;
+  padding: 12px 16px;
+  background: var(--panel);
+  border: 1px solid var(--dim);
+  border-radius: 4px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
   color: var(--dim);
   font-size: 10px;
   line-height: 1.7;
 }
+.help[hidden] { display: none; }
+.help-btn { width: 26px; }
 .help .key { color: var(--text); margin-right: 8px; }

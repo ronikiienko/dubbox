@@ -83,6 +83,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let follow = true; // keep the playhead in view while playing
   let expanded = -1; // track showing its per-note bar rows
   let resizeObs: ResizeObserver | undefined;
+  let help: HTMLElement, helpBtn: HTMLButtonElement;
+  let helpOpen = false;
   let tracksEl: HTMLElement;
   let mainH = 52; // height of a track's main lane, fitted to the window
   let spacerEl: HTMLElement;
@@ -740,6 +742,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
     return b;
   }
 
+  function setHelp(on: boolean) {
+    helpOpen = on;
+    help.hidden = !on;
+    helpBtn.classList.toggle('lit', on);
+  }
+
   function build() {
     const scrollLeft = scroller?.scrollLeft ?? 0;
     heads = [];
@@ -771,6 +779,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       h('div', 'logo', 'DUBBOX'),
       playBtn, recBtn, followBtn,
       h('div', 'spacer'),
+      helpBtn = button('?', 'btn small help-btn', () => setHelp(!helpOpen)),
       button('SAVE', 'btn small', () => exportProject(p)),
       button('LOAD', 'btn small', () => file.click()),
       button('NEW', 'btn small', () => {
@@ -819,7 +828,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
     tracks.append(headCol, timeline());
 
 
-    const help = h('div', 'help');
+    // shortcuts: hidden until asked for (? button or key), floating over the timeline
+    help = h('div', 'help');
+    help.hidden = !helpOpen;
     for (const [key, what] of HELP) {
       const item = h('div');
       item.append(h('span', 'key', key), what);
@@ -866,7 +877,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
       e.preventDefault();
       return;
     }
-    if (e.code === 'Escape') sel = null;
+    if (e.code === 'Escape') {
+      sel = null;
+      if (helpOpen) setHelp(false);
+    }
+    if (e.key === '?') setHelp(!helpOpen);
     if (e.code === 'KeyD' && !e.metaKey && !e.ctrlKey && !e.repeat) {
       dice();
       return;
