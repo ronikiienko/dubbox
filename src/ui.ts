@@ -37,10 +37,12 @@ const ROW_H = 52;
 const RULER_H = 20;
 const PAD = 9;
 const SUB_H = 22; // per-note bar rows of an expanded track
-const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
-const HOT_DWELL = 150; // ms the mouse must rest on a row before it grows
-const HOT_LEAVE = 250; // ms away before the grown row hands over / shrinks
-const HOT_MARGIN = 8; // px just outside the grown row that still count as on it (overshooting the max)
+const HOT_H = 108; // the bar row under the mouse grows to this, for precise drawing
+const HOT_DWELL = 150; // ms the mouse must rest on a row before it grows/hands over
+// Grown rows keep empty space above the max and below the min, so reaching for an extreme
+// stays inside the row (that space reads as max / min). Top space also holds the value numbers.
+const HOT_PAD_TOP = 28;
+const HOT_PAD_BOTTOM = 14;
 const COLORS = {
   bg: '#0d0d0c',
   cell: '#1f1e1b',
@@ -300,7 +302,10 @@ export function mountUI(root: HTMLElement, initial: Project) {
   const subRows = (ti: number) => (ti === expanded ? lockIds(ti) : []);
   const isHot = (ti: number, j: number) => !!hot && hot.ti === ti && hot.sub === j;
   const rowH = (ti: number, j: number) => rowAnim.get(`${ti}:${j}`) ?? SUB_H;
-  const rowPad = (ti: number, j: number) => (isHot(ti, j) ? 13 : 2); // hot rows print values above the bars
+  const padTop = (ti: number, j: number) => (isHot(ti, j) ? HOT_PAD_TOP : 2);
+  const padBottom = (ti: number, j: number) => (isHot(ti, j) ? HOT_PAD_BOTTOM : 2);
+  /** Bar area of a row: [top y, height] in which 0..1 is drawn. */
+  const barSpan = (ti: number, j: number) => rowH(ti, j) - padTop(ti, j) - padBottom(ti, j);
   const laneH = (ti: number) => subRows(ti).reduce((y, _, j) => y + rowH(ti, j), ROW_H);
   const laneTop = (ti: number) => {
     let y = RULER_H;
@@ -339,8 +344,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
    * over rows doesn't make them flap), then ease every row's height toward its target.
    */
   function animateRows(now: number, dt: number) {
-    const wait = hot && !sameRow(cand, hot) ? HOT_LEAVE : HOT_DWELL;
-    if (!gesture && !sameRow(cand, hot) && now - candSince > wait) hot = cand;
+    if (!gesture && !sameRow(cand, hot) && now - candSince > HOT_DWELL) hot = cand;
     const k = 1 - Math.exp(-dt / 0.04); // ~120 ms to settle
     let changed = false;
     subLabels.forEach((labels, ti) => labels.forEach((el, j) => {
@@ -423,9 +427,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     /** Absolute drawing: mouse height in the row → position (same geometry as drawTimeline). */
     const idxFromY = (b: NonNullable<typeof bars>, y: number) => {
       const d = PARAM_BY_ID[b.id];
-      const pad = rowPad(b.ti, b.sub);
-      const span = rowH(b.ti, b.sub) - pad - 2;
-      const n = clamp(1 - (y - b.rowTop - pad) / span);
+      const n = clamp(1 - (y - b.rowTop - padTop(b.ti, b.sub)) / barSpan(b.ti, b.sub));
       return Math.round(n * (d.positions - 1));
     };
 
@@ -478,13 +480,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const h0 = hit(e);
       hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
       // the hot row stays locked while a gesture is running, so a stroke never jumps rows
-      let c: RowRef = h0.sub >= 0 ? { ti: h0.ti, sub: h0.sub } : null;
-      if (hot && hot.ti === expanded) {
-        // a few px past the grown row's edge still count as on it (overshooting the max);
-        // neighbours are 22 px tall, so they stay easy to reach
-        const top = subTop(hot.ti, hot.sub);
-        if (e.offsetY > top - HOT_MARGIN && e.offsetY < top + rowH(hot.ti, hot.sub) + HOT_MARGIN) c = hot;
-      }
+      const c: RowRef = h0.sub >= 0 ? { ti: h0.ti, sub: h0.sub } : null;
       if (!sameRow(c, cand)) {
         cand = c;
         candSince = performance.now();
@@ -656,8 +652,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const d = PARAM_BY_ID[id];
         const rowTop = subTop(ti, j);
         const height = rowH(ti, j);
-        const pad = rowPad(ti, j);
-        const span = height - pad - 2;
+        const pad = padTop(ti, j);
+        const span = barSpan(ti, j);
+        const bottom = rowTop + height - padBottom(ti, j);
         const showValues = isHot(ti, j);
         if (showValues) {
           ctx.fillStyle = COLORS.cell;
@@ -679,7 +676,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
             ctx.fillRect(x + 4, n >= 0.5 ? mid - bh : mid, CELL - 8, bh);
           } else {
             const bh = Math.max(2, n * span);
-            ctx.fillRect(x + 4, rowTop + height - 2 - bh, CELL - 8, bh);
+            ctx.fillRect(x + 4, bottom - bh, CELL - 8, bh);
           }
           if (showValues) {
             // position as a number: 0–8, or −4…+4 around the centre for bipolar values
@@ -687,7 +684,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
             const half = (d.positions - 1) / 2;
             const label = d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
             ctx.fillStyle = locked ? COLORS.text : COLORS.dim;
-            ctx.fillText(label, x + CELL / 2, rowTop + 7);
+            ctx.fillText(label, x + CELL / 2, rowTop + 9);
           }
         }
       });

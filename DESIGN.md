@@ -97,7 +97,7 @@ Knobs: 5 FX + 4 global = **9**. Everything else is per note.
 ### 3.1 Per-note values (locks)
 - A track's sound is set **only per note**: its instrument values plus Lvl, Dly, Rev, Phs. There are no track knobs. Global knobs (delay, reverb, tape, tempo, swing, root, vol) are the only knobs.
 - **Click a track name** to expand it (one at a time). Under its lane, one row per value shows a **bar per note**: bright = this note has its own value, faint = the fixed default.
-- **The row the mouse rests on grows** (22 → 80 px) after a 150 ms dwell, easing open/closed over ~120 ms, so passing over rows doesn't make them flap. It grows downward so the mouse stays in it, prints each note's position as a number (0–8, or −4…+4 for Pan), and its label reveals a one-line description of the value. The row stays locked while a drag is running.
+- **The row the mouse rests on grows** (22 → 108 px) after a 150 ms dwell, easing open/closed over ~120 ms, so passing over rows doesn't make them flap. It keeps empty space above the max and below the min (reads as max/min), so reaching for an extreme stays inside the row. It grows downward so the mouse stays in it, prints each note's position as a number (0–8, or −4…+4 for Pan), and its label reveals a one-line description of the value. The row stays locked while a drag is running.
 - Drag a bar up/down = set that note's value. Drag across a row = draw values over every note you pass (bar height follows the mouse). Double-click a bar = back to the default.
 - **A new note copies the values of the previous note** on its track (or uses the defaults if it's the first). Painting a run carries the current sound forward.
 - Old saves: track knob settings that differ from the default are baked into the notes that used them.
