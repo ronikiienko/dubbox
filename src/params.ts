@@ -96,12 +96,29 @@ export const GLOBAL = TRACKS.length - 1;
 
 export const mixId = (i: number, k: 'rat' | 'dst' | 'crs' | 'phs' | 'lvl' | 'pan' | 'dly' | 'rev') => `mix.${i}.${k}`;
 
-/** A track's per-note values, in signal-flow order: voice → Dist → Phs → Lvl → Pan, plus sends. */
-export const lockIds = (i: number) => TRACKS[i].global ? TRACKS[i].voice : [
-  mixId(i, 'rat'),
-  ...TRACKS[i].voice,
-  mixId(i, 'dst'), mixId(i, 'crs'), mixId(i, 'phs'), mixId(i, 'lvl'), mixId(i, 'pan'), mixId(i, 'dly'), mixId(i, 'rev'),
-];
+const CORE = ['lp', 'res', 'hp', 'decay'];
+const coreId = (i: number, k: string) => TRACKS[i].voice.find((id) => id.endsWith('.' + k))!;
+
+/** A track's per-note values in named groups, roughly in signal-flow order: note → filter → color → mix → sends. */
+export function rowGroups(i: number): { name: string; ids: string[] }[] {
+  if (TRACKS[i].global) return [
+    { name: 'Song', ids: ['scale', 'root', 'tempo', 'swing'] },
+    { name: 'Delay', ids: ['delay.time', 'delay.fbk', 'delay.tone'] },
+    { name: 'Reverb', ids: ['reverb.size', 'reverb.spring'] },
+    { name: 'Master', ids: ['tape.age', 'volume'] },
+  ];
+  const own = TRACKS[i].voice.filter((id) => !CORE.includes(id.slice(id.indexOf('.') + 1)));
+  return [
+    { name: 'Note', ids: [mixId(i, 'rat'), ...own, coreId(i, 'decay')] },
+    { name: 'Filter', ids: [coreId(i, 'lp'), coreId(i, 'res'), coreId(i, 'hp')] },
+    { name: 'Color', ids: [mixId(i, 'dst'), mixId(i, 'crs'), mixId(i, 'phs')] },
+    { name: 'Mix', ids: [mixId(i, 'lvl'), mixId(i, 'pan')] },
+    { name: 'Sends', ids: [mixId(i, 'dly'), mixId(i, 'rev')] },
+  ];
+}
+
+/** A track's per-note values, in row order. */
+export const lockIds = (i: number) => rowGroups(i).flatMap((g) => g.ids);
 
 export const SWING = [50, 54, 58, 62, 66, 75];
 

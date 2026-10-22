@@ -98,6 +98,7 @@ There are **no knobs**. Everything is per note, and the song-wide values are row
 ### 3.1 Per-note values (locks)
 - A track's sound is set **only per note**: its instrument values plus Lvl, Dly, Rev, Phs. There are no knobs at all: song-wide values live on the GLOBAL lane (3.5).
 - **Click a track name** to expand it (one at a time). Under its lane, one row per value shows a **bar per note**: bright = this note has its own value, faint = the fixed default.
+- Rows come in **groups**, each with its name running vertically down the left and a thin divider (5 px gap) above: **Note** (Ratchet, the voice's own values, Decay) · **Filter** (Lowpass, Resonance, Highpass) · **Color** (Distortion, Bitcrush, Phaser) · **Mix** (Level, Pan) · **Sends** (Delay, Reverb). GLOBAL: **Song** (Scale, Root, Tempo, Swing) · **Delay** · **Reverb** · **Master** (Tape age, Volume). Defined in `rowGroups` (`params.ts`).
 - **Click a row (or its name) to open it** (22 → 80 px, easing ~120 ms): it prints each note's position as a number (0–8, or −4…+4 for Pan) and its label reveals a one-line description. One row open at a time; click it again or Esc to close. The opening click never edits, and a double-click right after it doesn't unset.
 - Drag a bar up/down = set that note's value. Drag across a row = draw values over every note you pass (bar height follows the mouse). Double-click a bar = back to the default.
 - **A new note copies the values of the previous note** on its track (or uses the defaults if it's the first). Painting a run carries the current sound forward.

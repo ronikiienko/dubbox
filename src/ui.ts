@@ -1,4 +1,4 @@
-import { GLOBAL, PARAM_BY_ID, RATCHET, TRACKS, mixId, describe, pitchRange, fromIndex, lockIds, toIndex, toReal } from './params';
+import { GLOBAL, PARAM_BY_ID, RATCHET, TRACKS, rowGroups, mixId, describe, pitchRange, fromIndex, lockIds, toIndex, toReal } from './params';
 import {
   SONG_STEPS, STEPS_PER_BAR,
   type Project, type StepState, NO_LOCK, audible,
@@ -54,6 +54,17 @@ const SUB_H = 22; // per-note bar rows of an expanded track
 const HOT_H = 80; // the bar row under the mouse grows to this, for precise drawing
 const HOT_PAD_TOP = 13; // room for the value numbers
 const HOT_PAD_BOTTOM = 2;
+const GROUP_H = 5; // gap + divider above each group's first row (its name runs down the left)
+/** Per track: row index → name of the group it starts. */
+const GROUP_AT = TRACKS.map((_, i) => {
+  const at = new Map<number, string>();
+  let j = 0;
+  for (const g of rowGroups(i)) {
+    at.set(j, g.name);
+    j += g.ids.length;
+  }
+  return at;
+});
 const COLORS = {
   bg: '#0d0d0c',
   cell: '#1f1e1b',
@@ -242,8 +253,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   const subRows = (ti: number) => (ti === expanded || ti === closing ? lockIds(ti) : []);
   const isHot = (ti: number, j: number) => !!hot && hot.ti === ti && hot.sub === j;
-  const rowH = (ti: number, j: number) => rowAnim.get(`${ti}:${j}`) ?? SUB_H;
-  const padTop = (ti: number, j: number) => (isHot(ti, j) ? HOT_PAD_TOP : 2);
+  /** A group's first row carries its caption gap on top; it folds with the row. */
+  const gapH = (ti: number, j: number, anim = rowAnim.get(`${ti}:${j}`) ?? SUB_H) =>
+    GROUP_AT[ti].has(j) ? GROUP_H * Math.min(1, anim / SUB_H) : 0;
+  const rowH = (ti: number, j: number) => (rowAnim.get(`${ti}:${j}`) ?? SUB_H) + gapH(ti, j);
+  const padTop = (ti: number, j: number) => gapH(ti, j) + (isHot(ti, j) ? HOT_PAD_TOP : 2);
   const padBottom = (ti: number, j: number) => (isHot(ti, j) ? HOT_PAD_BOTTOM : 2);
   /** Bar area of a row: [top y, height] in which 0..1 is drawn. */
   const barSpan = (ti: number, j: number) => rowH(ti, j) - padTop(ti, j) - padBottom(ti, j);
@@ -287,7 +301,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     if (!tracksEl) return;
     const cs = getComputedStyle(tracksEl);
     const avail = tracksEl.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - RULER_H - 14; // 14: scrollbar
-    const extra = expanded >= 0 ? lockIds(expanded).length * SUB_H + HOT_H - SUB_H : 0;
+    const extra = expanded >= 0 ? lockIds(expanded).length * SUB_H + GROUP_AT[expanded].size * GROUP_H + HOT_H - SUB_H : 0;
     const next = clamp(Math.floor((avail - extra) / TRACKS.length), ROW_MIN, ROW_MAX);
     if (next === mainH) return;
     mainH = next;
@@ -314,7 +328,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
       el.classList.toggle('hot', isHot(ti, j));
       if (next === cur) return;
       rowAnim.set(key, next);
-      el.style.height = `${next}px`;
+      el.style.height = `${next + gapH(ti, j, next)}px`;
+      el.style.paddingTop = `${gapH(ti, j, next)}px`;
       changed = true;
     }));
     if (changed) sizeCanvas();
@@ -680,9 +695,15 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const span = barSpan(ti, j);
         const bottom = rowTop + height - padBottom(ti, j);
         const showValues = isHot(ti, j);
+        const gap = gapH(ti, j);
+        if (gap) {
+          // group divider
+          ctx.fillStyle = COLORS.line;
+          ctx.fillRect(0, rowTop, w, 1);
+        }
         if (showValues) {
           ctx.fillStyle = COLORS.cell;
-          ctx.fillRect(0, rowTop, w, height);
+          ctx.fillRect(0, rowTop + gap, w, height - gap);
         }
         ctx.fillStyle = COLORS.cell;
         ctx.fillRect(0, rowTop + height - 1, w, 1);
@@ -883,12 +904,22 @@ export function mountUI(root: HTMLElement, initial: Project) {
       headCol.append(head);
       heads.push(head);
       names.push(name);
+      // each group: its name as vertical text down the left, its rows beside it
+      let rows = headCol;
       subLabels[ti] = subRows(ti).map((id, j) => {
+        const group = GROUP_AT[ti].get(j);
+        if (group) {
+          const box = h('div', 'subgroup');
+          rows = h('div', 'subrows');
+          box.append(h('div', 'groupname', group), rows);
+          headCol.append(box);
+        }
         const el = h('div', 'sublabel');
         el.append(h('div', 'subname', PARAM_BY_ID[id].label), h('div', 'subdesc', describe(id)));
         el.style.height = `${rowH(ti, j)}px`;
+        el.style.paddingTop = `${gapH(ti, j)}px`;
         el.addEventListener('click', () => openRow({ ti, sub: j }));
-        headCol.append(el);
+        rows.append(el);
         return el;
       });
     });
