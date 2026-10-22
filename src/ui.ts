@@ -602,21 +602,34 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const ids = lockIds(ti);
       ctx.globalAlpha = audible(p.tracks, ti) ? 1 : 0.3;
       const g = TRACKS[ti].global;
-      for (let si = first; si <= last; si++) {
-        // GLOBAL: highlight the steps where a value changes, named by the scale if that's one of them
-        const set = ids.some((id) => tr.locks[id][si] !== NO_LOCK);
-        const st = g ? set : tr.s[si];
+      if (g) {
+        // GLOBAL has no notes: a thin line, with a marker + what changed wherever a value is set
+        ctx.fillStyle = COLORS.cell;
+        ctx.fillRect(0, y + hh / 2, w, 1);
+        ctx.textAlign = 'left';
+        for (let si = first; si <= last; si++) {
+          const changed = ids.filter((id) => tr.locks[id][si] !== NO_LOCK);
+          if (!changed.length) continue;
+          const x = si * CELL - x0;
+          ctx.fillStyle = COLORS.accent;
+          ctx.fillRect(x, y, 2, hh);
+          const text = changed
+            .map((id) => {
+              const d = PARAM_BY_ID[id], i = tr.locks[id][si];
+              return id === 'scale' ? d.steps![i] : id === 'tempo' ? Math.round(toReal(d, fromIndex(d, i))) + ' bpm' : d.label;
+            })
+            .join(' · ');
+          ctx.fillStyle = COLORS.text;
+          ctx.fillText(text, x + 5, y + hh / 2 - 6);
+        }
+        ctx.textAlign = 'center';
+      }
+      for (let si = first; si <= last && !g; si++) {
+        const st = tr.s[si];
         const x = si * CELL - x0 + 1;
         ctx.fillStyle = st ? COLORS.accentDim : si % 4 === 0 ? COLORS.beat : COLORS.cell;
         ctx.fillRect(x, y, CELL - 2, hh);
         if (!st) continue;
-        if (g) {
-          ctx.fillStyle = COLORS.text;
-          const sc = tr.locks.scale[si];
-          if (sc !== NO_LOCK) ctx.fillText(PARAM_BY_ID.scale.steps![sc], x + (CELL - 2) / 2, y + hh / 2);
-          else ctx.fillRect(x + CELL / 2 - 2, y + hh / 2 - 1, 3, 3);
-          continue;
-        }
         if (tr.slide[si]) {
           // slide: a tie from this step into the next
           ctx.fillStyle = COLORS.text;
@@ -667,10 +680,10 @@ export function mountUI(root: HTMLElement, initial: Project) {
             // grows up/down from the centre line (e.g. Pan: up = right, down = left)
             const mid = rowTop + pad + span / 2;
             const bh = Math.max(2, Math.abs(n - 0.5) * span);
-            ctx.fillRect(x + 4, n >= 0.5 ? mid - bh : mid, CELL - 8, bh);
+            ctx.fillRect(g ? x : x + 4, n >= 0.5 ? mid - bh : mid, g ? CELL : CELL - 8, bh);
           } else {
             const bh = Math.max(2, n * span);
-            ctx.fillRect(x + 4, bottom - bh, CELL - 8, bh);
+            ctx.fillRect(g ? x : x + 4, bottom - bh, g ? CELL : CELL - 8, bh); // GLOBAL: one continuous fill
           }
           if (showValues && (!g || locked || si === first)) {
             // position as a number: 0–8, or −4…+4 around the centre for bipolar values

@@ -120,7 +120,7 @@ Values with a neutral "normal" default sit at the **middle position** (4 of 0–
 The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swing, Vol, Delay Time / Fbk / Tone, Reverb Size, Tape Age**.
 - **No notes to place.** Every step has a value. Expand GLOBAL (click its name) and draw in its rows like any value row: a value set on a step **holds until the next set value**; before the first one, the default. Held stretches are drawn dim, set steps bright (with their value when the row is hot).
 - Double-click a set step = remove it (the previous value holds through). Dice only touches set values (or the hovered step).
-- The collapsed lane marks the steps where something changes, with the scale's name if Scale changes there.
+- The GLOBAL lane draws **no note cells**: a thin line with an amber marker wherever a value is set, labelled with what changed (scale name, tempo in bpm, otherwise the value's name). Its open rows draw held values as one continuous fill, not per-step bars.
 - No mute/solo/throw. Selection, copy/paste (only GLOBAL → GLOBAL, so ruler copies carry their section's tempo/scale), undo all work.
 - Engine: a set value takes over at its step, before that step's notes trigger (so a scale change applies to the note on the same step). Seeking/looping re-resolves the values in force.
 - Old saves: global knob settings that differ from the default become GLOBAL values on step 0; v3 CHORD Scale values move to GLOBAL.
