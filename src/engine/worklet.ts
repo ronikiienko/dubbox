@@ -45,7 +45,8 @@ class Engine extends AudioWorkletProcessor {
   private perc = new Perc(this.sr);
   private bass = new Synth(this.sr, 29, [0], [0]);
   private chord = new Synth(this.sr, 41, [0, 3, 7, 10], [-6, 2, -2, 6]);
-  private voices: Voice[] = [this.kick, this.hat, this.perc, this.bass, this.chord];
+  private mel = new Synth(this.sr, 53, [0], [0]); // same mono saw as BASS, two octaves up
+  private voices: Voice[] = [this.kick, this.hat, this.perc, this.bass, this.chord, this.mel];
   private vals = new Float64Array(N);
   private hps = TRACKS.map(() => new SVF());
   private hpOn = new Array<boolean>(N).fill(false);
@@ -177,6 +178,7 @@ class Engine extends AudioWorkletProcessor {
       case 2: this.perc.set(R['perc.lp'], R['perc.res'], R['perc.decay']); break;
       case 3: this.bass.set(R['bass.lp'], R['bass.res'], R['bass.decay'], R.root); break;
       case 4: this.chord.set(R['chord.lp'], R['chord.res'], R['chord.decay'], R.root); break;
+      case 5: this.mel.set(R['mel.lp'], R['mel.res'], R['mel.decay'], R.root); break;
     }
   }
 

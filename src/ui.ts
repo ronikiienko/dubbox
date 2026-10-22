@@ -29,7 +29,7 @@ function arc(from: number, to: number): string {
   return `M${x0},${y0} A${R},${R} 0 ${(to - from) * 270 > 180 ? 1 : 0} 1 ${x1},${y1}`;
 }
 
-const THROW_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT'];
+const THROW_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY'];
 
 // timeline geometry (px)
 const CELL = 22;
@@ -755,7 +755,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     );
 
     const help = h('div', 'help',
-      'space play · 1–5 mute · shift+1–5 solo · hold Q W E R T = dub throw · ' +
+      'space play · 1–6 mute · shift+1–6 solo · hold Q W E R T Y = dub throw · ' +
       'click step = on/off · drag sideways = paint · drag up/down or wheel on a step = pitch · click track name = sound per note · alt-click (bass/chord) = slide · ' +
       'click ruler = play from bar · drag ruler = select bars · shift-drag = select · ⌘C/X/V copy/cut/paste at mouse · ⌘D duplicate · D dice selection/hovered note · ⌘Z undo · wheel = scroll · F = follow');
 
@@ -808,7 +808,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       return;
     }
     if (e.repeat || e.metaKey || e.ctrlKey) return;
-    const digit = /^Digit([1-5])$/.exec(e.code);
+    const digit = /^Digit([1-6])$/.exec(e.code);
     if (digit) {
       const i = +digit[1] - 1;
       if (e.shiftKey) p.tracks[i].solo = !p.tracks[i].solo;

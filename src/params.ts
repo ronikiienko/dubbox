@@ -83,6 +83,7 @@ export const TRACKS: TrackDef[] = [
   { name: 'PERC', voice: ['perc.lp', 'perc.res', 'perc.hp', 'perc.decay'] },
   { name: 'BASS', slide: true, voice: ['bass.lp', 'bass.res', 'bass.hp', 'bass.decay'] },
   { name: 'CHORD', slide: true, voice: ['chord.lp', 'chord.res', 'chord.hp', 'chord.decay'] },
+  { name: 'MELODY', slide: true, voice: ['mel.lp', 'mel.res', 'mel.hp', 'mel.decay'] },
 ];
 
 export const mixId = (i: number, k: 'dst' | 'phs' | 'lvl' | 'pan' | 'dly' | 'rev') => `mix.${i}.${k}`;
@@ -102,6 +103,7 @@ const HP_RANGE: Record<string, [number, number]> = {
   perc: [200, 8000],
   bass: [30, 2000],
   chord: [60, 4000],
+  mel: [80, 6000],
 };
 
 /** HP knob position (0..1) → Hz. Position 0 = 0 = off: the filter is bypassed, so the default changes nothing. */
@@ -140,6 +142,7 @@ export const PARAMS: ParamDef[] = [
   ...core('perc', [500, 12000, 12000], 0.25, around(0.12, 4)),
   ...synthParams('bass', 220, 0.25),
   ...synthParams('chord', 600, 0.35),
+  ...synthParams('mel', 1500, 0.3),
 
   // mixer
   ...TRACKS.flatMap((_, i) => [

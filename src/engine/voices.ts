@@ -120,7 +120,7 @@ export class Perc implements Voice {
 const HOLD_LEVEL = 0.3;
 const DB_PER_OCTAVE = -2; // higher notes sound louder (esp. on small speakers), so tilt them down
 
-/** Mono saw synth. One oscillator for BASS, four (minor 7th) for CHORD. Analog drift is baked in. */
+/** Mono saw synth. One oscillator for BASS and MELODY, four (minor 7th) for CHORD. Analog drift is baked in. */
 export class Synth implements Voice {
   private ph: Float64Array;
   private dt: Float64Array;

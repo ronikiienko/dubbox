@@ -12,7 +12,7 @@ Every future feature must pass these rules. If it doesn't, it isn't added.
 1. **Max 4 knobs per module.** Prefer 1–2. Use macros: one knob drives several internal params along hand-tuned curves.
 2. **No menus, no dialogs, no hidden pages.** Everything is visible on one screen at all times.
 3. **No editors.** No piano roll, no automation lanes, no curve drawing. You *perform* changes.
-4. **Fixed structure.** 5 tracks, one 300-bar song, 16th-step grid. Not configurable.
+4. **Fixed structure.** 6 tracks, one 300-bar song, 16th-step grid. Not configurable.
 5. **Character is baked in.** Analog drift, saturation, filtering and glue are always on and tuned by us, not exposed.
 6. **Buttons beat knobs.** A toggle is cheaper than a knob.
 7. **When in doubt, leave it out.**
@@ -49,13 +49,13 @@ src/
 
 ## 2. The instrument
 
-### Tracks (fixed, 5)
+### Tracks (fixed, 6): KICK, HAT, PERC, BASS, CHORD, MELODY
 
 Every voice has **exactly the same** per-note values.
 
-| Value | Meaning everywhere | KICK | HAT | PERC | BASS / CHORD |
+| Value | Meaning everywhere | KICK | HAT | PERC | BASS / CHORD / MELODY |
 |---|---|---|---|---|---|
-| *Pitch* (per step) | the sound's frequency, ±12 st | sine pitch (base 50 Hz) | noise HP frequency (base 8 kHz) | ring + click frequency (base 1.4 kHz) | note (relative to Root) |
+| *Pitch* (per step) | the sound's frequency, ±12 st | sine pitch (base 50 Hz) | noise HP frequency (base 8 kHz) | ring + click frequency (base 1.4 kHz) | note (relative to Root). BASS F1, CHORD F2 (minor 7th), MELODY F3 |
 | **LP** | lowpass on the voice (brightness) | 4-pole ladder after drive | 2× one-pole LP | 4-pole ladder | ladder cutoff (+ envelope) |
 | **Res** | resonance of the voice's filter | ladder res (boom) | HP resonance (ring) | BP Q (ringy ↔ noisy) | ladder res |
 | **HP** | highpass, 12 dB. Position 0 = off (bypassed) | 30 Hz–1 kHz | 3–16 kHz | 200 Hz–8 kHz | bass 30 Hz–2 kHz, chord 60 Hz–4 kHz |
@@ -303,7 +303,7 @@ worklet → main:
 - Knob visual: arc = base, dot = live value (shows throws).
 - Colors: near-black background, off-white text, one accent color (amber) for active/playhead, red only for REC.
 
-Keyboard: `Space` play · `1–5` mute · `Shift+1–5` solo · `Q W E R T` hold = dub throw · `F` follow.
+Keyboard: `Space` play · `1–6` mute · `Shift+1–6` solo · `Q W E R T Y` hold = dub throw · `F` follow.
 
 ---
 
