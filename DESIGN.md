@@ -101,6 +101,7 @@ There are **no knobs**. Everything is per note, and the song-wide values are row
 - Rows come in **groups**, each with its name running vertically down the left and a thin divider (5 px gap) above: **Note** (Ratchet, the voice's own values, Decay) · **Filter** (Lowpass, Resonance, Highpass) · **Color** (Distortion, Bitcrush, Phaser) · **Mix** (Level, Pan) · **Sends** (Delay, Reverb). GLOBAL: **Song** (Scale, Root, Tempo, Swing) · **Delay** · **Reverb** · **Master** (Tape age, Volume). Defined in `rowGroups` (`params.ts`).
 - **Click a row (or its name) to open it** (22 → 80 px, easing ~120 ms): it prints each note's position as a number (0–8, or −4…+4 for Pan) and its label reveals a one-line description. One row open at a time; click it again or Esc to close. The opening click never edits, and a double-click right after it doesn't unset.
 - Drag a bar up/down = set that note's value. Drag across a row = draw values over every note you pass (bar height follows the mouse). Double-click a bar = back to the default.
+- **⇧-drag in an open row = ramp**: a straight line from where you press to the mouse (dashed guide while dragging); every note under it gets its point on the line, snapped to the positions. Moving back un-does the notes you leave. One undo step.
 - **A new note copies the values of the previous note** on its track (or uses the defaults if it's the first). Painting a run carries the current sound forward.
 - Old saves: track knob settings that differ from the default are baked into the notes that used them.
 - Notes with locks get a small dot on the main lane. Deleting a note deletes its locks.
@@ -108,7 +109,7 @@ There are **no knobs**. Everything is per note, and the song-wide values are row
 - **Slide glides everything**: on a slid note, pitch *and* all strip values glide linearly into the next note's values over the step.
 
 ### 3.2 Selection, copy/paste, undo (`edit.ts`)
-- **Drag on the ruler** = select whole bars on all tracks (a plain ruler click still moves the start marker). **Shift-drag in the lanes** = rectangle of steps × tracks. **Esc** or a plain click in the lanes clears it.
+- **Drag on the ruler** = select whole bars on all tracks (a plain ruler click still moves the start marker). **Shift-drag in the main lanes** = rectangle of steps × tracks. **Esc** or a plain click in the lanes clears it.
 - **⌘C / ⌘X** copy / cut. **⌘V** pastes with its top-left at the step under the mouse; hold ⌘ to see a dashed outline of where it lands. Bar selections from the ruler always paste onto the same tracks. **Delete** clears the selection.
 - **⌘D** duplicates the selection right after itself and moves the selection onto the copy, so repeated ⌘D keeps extending (4 → 8 → 12 bars…).
 - Paste **overwrites** the target area (empty steps included). Notes carry pitch, slide and per-note values. Across tracks every value carries over by knob position (slide only between synth tracks).

@@ -30,6 +30,7 @@ const HELP: [string, string][] = [
   ['⌥-click step', 'slide (synths)'],
   ['click track name', 'per-note values (GLOBAL: tempo, FX…)'],
   ['drag in a value row', 'set · across = draw'],
+  ['⇧-drag in a value row', 'ramp: straight line across notes'],
   ['dbl-click value', 'unset'],
   ['click ruler', 'play from bar'],
   ['drag ruler / ⇧-drag', 'select bars / area'],
@@ -115,6 +116,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
   const undoStack: Snapshot[] = [];
   let redoStack: Snapshot[] = [];
   let pending: Snapshot | null = null; // taken at gesture start, committed on its first real change
+  // ⇧-drag in an open row: a straight line from the press to the mouse, every note on it gets its point
+  let ramp: { ti: number; id: string; si0: number; idx0: number; si1: number; idx1: number; orig: Uint8Array } | null = null;
 
   // ---- timeline ---------------------------------------------------------
   // One canvas for all lanes, virtualized: only the visible steps are drawn.
@@ -445,7 +448,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       const { si, ti, sub, rowTop, ruler } = hit(e);
-      if (ruler || (e.shiftKey && ti >= 0)) {
+      if (ruler || (e.shiftKey && ti >= 0 && sub < 0)) {
         canvas.setPointerCapture(e.pointerId);
         selDrag = { ruler, t0: ti, s0: si, ti, moved: false };
         if (!ruler) updateSel(si, ti);
@@ -464,6 +467,13 @@ export function mountUI(root: HTMLElement, initial: Project) {
       if (sub >= 0) {
         const id = subRows(ti)[sub];
         canvas.setPointerCapture(e.pointerId);
+        if (e.shiftKey) {
+          const n = clamp(1 - (e.offsetY - rowTop - padTop(ti, sub)) / barSpan(ti, sub));
+          const idx = Math.round(n * (PARAM_BY_ID[id].positions - 1));
+          ramp = { ti, id, si0: si, idx0: idx, si1: si, idx1: idx, orig: tr.locks[id].slice() };
+          drawRamp();
+          return;
+        }
         bars = { ti, sub, id, si0: si, last: si, y: e.clientY, idx0: toIndex(PARAM_BY_ID[id], noteValue(ti, id, si)), rowTop, mode: 'pending' };
         return;
       }
@@ -486,6 +496,15 @@ export function mountUI(root: HTMLElement, initial: Project) {
       if (selDrag) {
         if (h0.si !== selDrag.s0 || h0.ti !== selDrag.t0) selDrag.moved = true;
         if (selDrag.moved || !selDrag.ruler) updateSel(h0.si, h0.ti);
+        return;
+      }
+      if (ramp) {
+        const r = ramp;
+        const sub = subRows(r.ti).indexOf(r.id);
+        const n = clamp(1 - (e.offsetY - subTop(r.ti, sub) - padTop(r.ti, sub)) / barSpan(r.ti, sub));
+        r.si1 = h0.si;
+        r.idx1 = Math.round(n * (PARAM_BY_ID[r.id].positions - 1));
+        drawRamp();
         return;
       }
       if (bars) {
@@ -528,7 +547,23 @@ export function mountUI(root: HTMLElement, initial: Project) {
         setStep(d.ti, d.si0, (tr.s[d.si0] || 1) as StepState, note);
       }
     });
+    /** Put back what the last frame of the ramp overwrote, then lay the line over the notes it spans. */
+    let rampLo = 0, rampHi = -1;
+    const drawRamp = () => {
+      const r = ramp!;
+      const tr = p.tracks[r.ti];
+      for (let i = rampLo; i <= rampHi; i++) setLock(r.ti, r.id, i, r.orig[i]);
+      rampLo = Math.min(r.si0, r.si1);
+      rampHi = Math.max(r.si0, r.si1);
+      const len = r.si1 - r.si0;
+      for (let i = rampLo; i <= rampHi; i++) {
+        if (!tr.s[i]) continue;
+        setLock(r.ti, r.id, i, Math.round(len ? r.idx0 + ((r.idx1 - r.idx0) * (i - r.si0)) / len : r.idx0));
+      }
+    };
+
     const end = () => {
+      rampHi = -1;
       if (selDrag?.ruler && !selDrag.moved) {
         // plain ruler click: move the start marker
         sel = null;
@@ -542,6 +577,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       }
       drag = null;
       bars = null;
+      ramp = null;
       pending = null;
     };
     canvas.addEventListener('pointerleave', () => (hover = null));
@@ -733,6 +769,19 @@ export function mountUI(root: HTMLElement, initial: Project) {
             ctx.fillStyle = locked ? COLORS.text : COLORS.dim;
             ctx.fillText(label, x + CELL / 2, rowTop + 7);
           }
+        }
+        if (ramp && ramp.ti === ti && ramp.id === id) {
+          // the line being drawn
+          const max = d.positions - 1;
+          const px = (si: number) => si * CELL - x0 + CELL / 2;
+          const py = (idx: number) => bottom - (idx / max) * span;
+          ctx.strokeStyle = COLORS.accent;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.moveTo(px(ramp.si0), py(ramp.idx0));
+          ctx.lineTo(px(ramp.si1), py(ramp.idx1));
+          ctx.stroke();
+          ctx.setLineDash([]);
         }
         ctx.restore();
       });
