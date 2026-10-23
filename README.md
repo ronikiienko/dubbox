@@ -23,7 +23,7 @@ The rest is simplified the same way. There's no piano roll, and I tried to add o
 - **7 tracks:** KICK, HAT, PERC, SNARE, BASS, CHORD, MELODY, plus a **GLOBAL** lane for tempo, scale, swing and reverb.
 - **One linear song** on a 16th-step grid. No patterns: you draw the whole track on one timeline.
 - **No knobs, no automation lanes.** Click a track name to open its value rows, grouped as Note · Filter · Color · Mix · Sends, and set them per note.
-- **Dub tools:** a tape delay per track, its time, feedback and tone changeable on any step, hold-a-key throws, room/spring reverb, tape saturation, mute/solo for live arranging.
+- **Dub tools:** a tape delay per track, its time, feedback, tone, wobble, width (up to ping-pong) and reverb amount changeable on any step, hold-a-key throws, room/spring reverb, tape saturation, mute/solo for live arranging.
 - **REC** records what you hear to WAV or MP3, or a **VIDEO** of the app with its sound (pick this tab when the browser asks).
 - **EXPORT** renders the whole song to WAV or MP3 offline: nothing has to play, and it's faster than realtime.
 

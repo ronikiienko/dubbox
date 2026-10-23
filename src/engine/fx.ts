@@ -1,31 +1,60 @@
 import { CRUSH } from '../params';
 import { DelayLine, Noise, OnePole, SVF, Smooth, TAU, clamp, dbToGain, lpCoef, tanh, timeCoef } from './dsp';
 
-/** Tape echo: HP + LP + tanh inside the feedback loop, slewed time, wow. */
+/**
+ * Tape echo: HP + LP + tanh inside the feedback loop, slewed time, wow. Two loops (A = left, B = right):
+ * at Spread's default they run identically, the right one heard 11 ms late (the old fixed width); below it
+ * the offset shrinks to mono; above it the loops cross-feed into ping-pong (input only into A, A → B → A).
+ */
 export class TapeDelay {
-  private dl: DelayLine;
+  private a: DelayLine;
+  private b: DelayLine;
   private time: Smooth;
   private target = 0;
   private fbk = 0;
   private lpA = 0;
   private hpA = 0;
-  private lp1 = new OnePole();
-  private lp2 = new OnePole();
-  private hp = new OnePole();
+  private fa = [new OnePole(), new OnePole(), new OnePole()]; // loop A: lp, lp, hp
+  private fb = [new OnePole(), new OnePole(), new OnePole()];
   private wowPh = 0;
   private wowPh2 = 0;
-  private stereo: number;
+  private flutPh = 0;
+  private wob = 1; // wow depth, ms (1 = the old fixed amount)
+  private flut = 0; // flutter depth, ms
+  private off = 0; // right side's extra delay, samples
+  private cross = 0; // 0 = two equal loops .. 1 = ping-pong
+  private verb = 0.125; // how much of the echo goes into the room
+  // all glide, so changing them mid-tail doesn't click
+  private wobS: Smooth;
+  private flutS: Smooth;
+  private offS: Smooth;
+  private crossS: Smooth;
+  private verbS: Smooth;
   l = 0;
   r = 0;
+  rv = 0; // into the reverb
 
   constructor(private sr: number) {
-    this.dl = new DelayLine(sr * 4);
+    this.a = new DelayLine(sr * 4);
+    this.b = new DelayLine(sr * 4);
     this.time = new Smooth(sr * 0.3, timeCoef(0.1, sr));
-    this.stereo = 0.011 * sr;
+    const c = timeCoef(0.15, sr);
+    this.wobS = new Smooth(1, c);
+    this.flutS = new Smooth(0, c);
+    this.offS = new Smooth(0.011 * sr, c);
+    this.crossS = new Smooth(0, c);
+    this.verbS = new Smooth(0.125, c);
   }
 
-  /** tone: -1 dark .. 0 neutral .. +1 thin */
-  set(timeSamples: number, fbk: number, tone: number) {
+  /** tone: -1 dark .. 0 neutral .. +1 thin; wobble 0 clean .. 0.25 default .. 1 seasick;
+   *  spread 0 mono .. 0.25 default .. 1 ping-pong; verb: share of the echo sent to the reverb */
+  set(timeSamples: number, fbk: number, tone: number, wobble: number, spread: number, verb: number) {
+    // slow wow grows with the square (default 1 ms, top 16 ms ≈ ±70 cents); fast flutter joins above default
+    this.wob = 16 * wobble * wobble;
+    this.flut = 0.2 * Math.max(0, wobble - 0.25) / 0.75;
+    this.off = 0.011 * this.sr * Math.min(1, spread / 0.25);
+    this.cross = Math.max(0, spread - 0.25) / 0.75;
+    this.verb = verb;
     this.target = timeSamples;
     this.fbk = fbk;
     // dark side: 6 kHz → 250 Hz, curved so −0.25 (the default) stays at ~3.6 kHz
@@ -35,6 +64,19 @@ export class TapeDelay {
     this.hpA = lpCoef(hp, this.sr);
   }
 
+  /** Take the set values outright (first note after Play), apart from Time (its tail may still ring). */
+  snap() {
+    this.wobS.v = this.wob;
+    this.flutS.v = this.flut;
+    this.offS.v = this.off;
+    this.crossS.v = this.cross;
+    this.verbS.v = this.verb;
+  }
+
+  private filt(f: OnePole[], x: number) {
+    return f[2].hp(f[1].lp(f[0].lp(x, this.lpA), this.lpA), this.hpA);
+  }
+
   process(x: number) {
     const sr = this.sr;
     const t = this.time.next(this.target);
@@ -42,14 +84,21 @@ export class TapeDelay {
     this.wowPh2 += 0.13 / sr;
     if (this.wowPh >= 1) this.wowPh -= 1;
     if (this.wowPh2 >= 1) this.wowPh2 -= 1;
-    const wow = (Math.sin(TAU * this.wowPh) * 0.6 + Math.sin(TAU * this.wowPh2) * 0.3) * 0.001 * sr;
+    this.flutPh += 6.3 / sr;
+    if (this.flutPh >= 1) this.flutPh -= 1;
+    const wow = ((Math.sin(TAU * this.wowPh) * 0.6 + Math.sin(TAU * this.wowPh2) * 0.3) * this.wobS.next(this.wob) + Math.sin(TAU * this.flutPh) * this.flutS.next(this.flut)) * 0.001 * sr;
+    const d = t + wow;
+    const p = this.crossS.next(this.cross);
 
-    const tapL = this.dl.read(t + wow);
-    const tapR = this.dl.read(t + wow + this.stereo);
-    const f = this.hp.hp(this.lp2.lp(this.lp1.lp(tapL, this.lpA), this.lpA), this.hpA);
-    this.dl.write(x + tanh(f * this.fbk));
-    this.l = tapL;
-    this.r = tapR;
+    const tapA = this.a.read(d);
+    const tapB = this.b.read(d);
+    const fA = this.filt(this.fa, tapA);
+    const fB = this.filt(this.fb, tapB);
+    this.a.write(x + tanh(this.fbk * (fA + p * (fB - fA))));
+    this.b.write(x * (1 - p) + tanh(this.fbk * (fB + p * (fA - fB))));
+    this.l = tapA;
+    this.r = this.b.read(d + this.offS.next(this.off) + 1); // +1: B was just written
+    this.rv = (this.l + this.r) * this.verbS.next(this.verb);
   }
 }
 

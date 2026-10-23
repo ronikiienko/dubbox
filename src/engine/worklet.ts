@@ -234,7 +234,7 @@ class Engine extends AudioWorkletProcessor {
     this.revT[t] = R[mixId(t, 'rev')];
     this.panT[t] = R[mixId(t, 'pan')];
     // this track's echo: time and feedback from the note, colour from GLOBAL
-    this.delays[t].set(DELAY_SIXTEENTHS[R[mixId(t, 'dtime')]] * ((this.sr * 60) / R.tempo / 4), R[mixId(t, 'dfbk')], R[mixId(t, 'dtone')]);
+    this.delays[t].set(DELAY_SIXTEENTHS[R[mixId(t, 'dtime')]] * ((this.sr * 60) / R.tempo / 4), R[mixId(t, 'dfbk')], R[mixId(t, 'dtone')], R[mixId(t, 'dwob')], R[mixId(t, 'dspr')], R[mixId(t, 'dverb')]);
     const hpId = this.hpIds[t];
     const hp = hpHz(hpId.slice(0, hpId.indexOf('.')), R[hpId]);
     this.hpOn[t] = hp > 0;
@@ -319,6 +319,7 @@ class Engine extends AudioWorkletProcessor {
           this.dly[t].v = this.dlyT[t];
           this.rev[t].v = this.revT[t];
           this.pan[t].v = this.panT[t];
+          this.delays[t].snap();
         }
       }
       if (!audible(this.tracks, t)) {
@@ -426,12 +427,12 @@ class Engine extends AudioWorkletProcessor {
         echo.process(v * this.dly[t].next(this.dlyT[t]));
         dl += echo.l;
         dr += echo.r;
+        rIn += echo.rv;
         rIn += v * this.rev[t].next(this.revT[t]);
       }
 
-      const rvIn = rIn + 0.125 * (dl + dr);
-      this.reverb.process(rvIn);
-      this.spring.process(rvIn);
+      this.reverb.process(rIn);
+      this.spring.process(rIn);
       // Spring: equal-power crossfade room → spring tank (the spring is level-matched to the room)
       const sa = (R['reverb.spring'] * Math.PI) / 2;
       const rc = Math.cos(sa), sc = Math.sin(sa) * SPRING_GAIN;
