@@ -4,7 +4,7 @@
 import { ATTACK, DELAY_SIXTEENTHS, GLOBAL, PARAMS, RATCHET, lvlGain, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
 import { NO_LOCK, audible, type TrackState } from '../state';
 import type { FromEngine, ToEngine } from './bridge';
-import { SVF, Smooth, timeCoef } from './dsp';
+import { SVF, Smooth, dbToGain, timeCoef } from './dsp';
 import { Crush, Drive, Glue, Spring, Phaser, Reverb, Tape, TapeDelay } from './fx';
 import { Hat, Kick, Perc, Snare, Synth, type Voice } from './voices';
 
@@ -78,6 +78,8 @@ class Engine extends AudioWorkletProcessor {
   private rev: Smooth[];
   private pan: Smooth[];
   private vol: Smooth;
+  private trkT = new Float64Array(N).fill(1); // track faders, as gain
+  private trk: Smooth[];
 
   // fx + master
   private delays = TRACKS.slice(0, N).map(() => new TapeDelay(this.sr)); // one tape echo per track
@@ -96,6 +98,7 @@ class Engine extends AudioWorkletProcessor {
     super();
     const a = timeCoef(0.02, this.sr);
     this.lvl = TRACKS.map(() => new Smooth(0, a));
+    this.trk = TRACKS.map(() => new Smooth(1, a));
     this.dly = TRACKS.map(() => new Smooth(0, a));
     this.rev = TRACKS.map(() => new Smooth(0, a));
     this.pan = TRACKS.map(() => new Smooth(0, a));
@@ -114,6 +117,7 @@ class Engine extends AudioWorkletProcessor {
         Object.assign(this.norm, m.project.params);
         this.tracks = m.project.tracks;
         this.total = this.tracks[0].s.length;
+        this.tracks.forEach((tr, t) => { if (t < N) this.trk[t].v = this.trkT[t] = dbToGain(tr.vol ?? 0); });
         this.resolveGlobal(this.nextK - 1);
         this.resolveLanes(this.nextK - 1);
         break;
@@ -133,6 +137,8 @@ class Engine extends AudioWorkletProcessor {
       case 'flags':
         this.tracks[m.i].mute = m.mute;
         this.tracks[m.i].solo = m.solo;
+        this.tracks[m.i].vol = m.vol;
+        this.trkT[m.i] = dbToGain(m.vol);
         break;
       case 'throw':
         this.throws[m.i] = m.on;
@@ -411,7 +417,7 @@ class Engine extends AudioWorkletProcessor {
       // per track: highpass → dist → bitcrush → phaser → fader → post-fader sends
       let dryL = 0, dryR = 0, dl = 0, dr = 0, rIn = 0;
       for (let t = 0; t < N; t++) {
-        const g = this.lvl[t].next(this.lvlT[t]);
+        const g = this.lvl[t].next(this.lvlT[t]) * this.trk[t].next(this.trkT[t]);
         let x = vals[t];
         if (this.hpOn[t]) {
           this.hps[t].run(x);

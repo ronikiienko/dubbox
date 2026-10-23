@@ -14,7 +14,11 @@ export interface TrackState {
   locks: Record<string, Uint8Array>; // per lockable param: detent index per step, NO_LOCK = use the knob
   mute: boolean;
   solo: boolean;
+  vol: number; // track fader, dB (TRACK_VOL range): the whole track, echoes and reverb share included
 }
+
+/** Track fader range, dB, in 1 dB steps. */
+export const TRACK_VOL = { min: -24, max: 6 };
 
 /** A track sounds if it isn't muted and, when anything is soloed, it is soloed too. */
 export function audible(tracks: TrackState[], i: number): boolean {
@@ -39,6 +43,7 @@ function emptyTrack(i: number): TrackState {
     locks: Object.fromEntries(lockIds(i).map((id) => [id, new Uint8Array(SONG_STEPS).fill(NO_LOCK)])),
     mute: false,
     solo: false,
+    vol: 0,
   };
 }
 
@@ -60,6 +65,7 @@ interface SavedTrack {
   locks?: Record<string, [number, number][]>;
   mute: boolean;
   solo?: boolean;
+  vol?: number;
 }
 
 interface SavedProject {
@@ -83,7 +89,7 @@ function serialize(p: Project): SavedProject {
         for (let i = 0; i < SONG_STEPS; i++) if (arr[i] !== NO_LOCK && arr[i] !== def) l.push([i, arr[i]]);
         if (l.length) locks[id] = l;
       }
-      return { hits, locks, mute: tr.mute, solo: tr.solo };
+      return { hits, locks, mute: tr.mute, solo: tr.solo, ...(tr.vol ? { vol: tr.vol } : {}) };
     }),
   };
 }
@@ -187,6 +193,7 @@ function deserialize(raw: { version?: number; params?: Record<string, number>; t
       }
       tr.mute = !!st.mute;
       tr.solo = !!st.solo;
+      if (typeof st.vol === 'number') tr.vol = Math.max(TRACK_VOL.min, Math.min(TRACK_VOL.max, Math.round(st.vol)));
     } else if (rt && typeof rt === 'object' && 'steps' in rt) {
       const v1 = rt as V1Track;
       const len = v1.length || STEPS_PER_BAR;

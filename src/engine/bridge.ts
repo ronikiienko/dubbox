@@ -8,7 +8,7 @@ export type ToEngine =
   | { t: 'param'; id: string; v: number } // normalized 0..1 base value
   | { t: 'step'; i: number; si: number; s: number; note: number; slide: number }
   | { t: 'lock'; i: number; id: string; si: number; v: number } // v = detent index or NO_LOCK
-  | { t: 'flags'; i: number; mute: boolean; solo: boolean }
+  | { t: 'flags'; i: number; mute: boolean; solo: boolean; vol: number }
   | { t: 'throw'; i: number; on: boolean }
   | { t: 'play'; on: boolean; from: number } // from = song step
   | { t: 'loop'; s0: number; s1: number } // loop steps s0..s1 (exclusive); s1 = 0 = off

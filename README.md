@@ -44,6 +44,7 @@ The rest is simplified the same way. There's no piano roll, and I tried to add o
 | Dice (random nudge) | `D` |
 | Dub throw | hold `Q W E R T Y U` |
 | Mute / solo | `1–7` / `⇧1–7` |
+| Track volume | drag the dB number next to M / S |
 
 Press **?** in the app for the full list.
 

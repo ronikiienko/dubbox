@@ -54,7 +54,7 @@ header {
   align-content: start;
   padding: 0 0 0 14px;
   display: grid;
-  grid-template-columns: 170px minmax(0, 1fr);
+  grid-template-columns: 186px minmax(0, 1fr);
   gap: 14px;
 }
 .col { display: flex; flex-direction: column; }
@@ -76,6 +76,15 @@ header {
 
 .toggles { display: flex; gap: 4px; }
 .tog { width: 28px; height: 22px; padding: 0; color: var(--dim); }
+/* track fader: the number is the dB, the fill its position (bottom = −24, top = +6) */
+.fader {
+  width: 30px; height: 22px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 3px;
+  display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--dim);
+  cursor: ns-resize; user-select: none; touch-action: none;
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.12) calc(var(--f, 0.8) * 100%), transparent 0);
+}
+.fader:hover { color: var(--text); }
+.fader.set { color: var(--text); }
 .tog.lit { color: var(--bg); background: var(--text); border-color: var(--text); }
 .tog.solo.lit { background: #7fb069; border-color: #7fb069; }
 

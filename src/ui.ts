@@ -1,7 +1,7 @@
 import { GLOBAL, PARAM_BY_ID, isLane, RATCHET, TRACKS, rowGroups, mixId, describe, pitchRange, fromIndex, lockIds, toIndex, toReal } from './params';
 import {
   SONG_STEPS, STEPS_PER_BAR,
-  type Project, type StepState, NO_LOCK, audible,
+  type Project, type StepState, NO_LOCK, TRACK_VOL, audible,
   emptyProject,
 } from './state';
 import { UNTITLED, add, currentMeta, open, scheduleSave } from './library';
@@ -174,7 +174,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   function flagsChanged(i: number) {
     const tr = p.tracks[i];
-    send({ t: 'flags', i, mute: tr.mute, solo: tr.solo });
+    send({ t: 'flags', i, mute: tr.mute, solo: tr.solo, vol: tr.vol });
     p.tracks.forEach((_, j) => renderHead(j));
     scheduleSave(p);
   }
@@ -185,6 +185,10 @@ export function mountUI(root: HTMLElement, initial: Project) {
     heads[ti].classList.toggle('muted', !audible(p.tracks, ti));
     heads[ti].querySelector('.solo')!.classList.toggle('lit', tr.solo);
     heads[ti].querySelector('.mute')!.classList.toggle('lit', tr.mute);
+    const fader = heads[ti].querySelector<HTMLElement>('.fader')!;
+    fader.textContent = tr.vol > 0 ? '+' + tr.vol : tr.vol < 0 ? '−' + -tr.vol : '0';
+    fader.classList.toggle('set', tr.vol !== 0);
+    fader.style.setProperty('--f', String((tr.vol - TRACK_VOL.min) / (TRACK_VOL.max - TRACK_VOL.min)));
   }
 
   // ---- undo + region edits ---------------------------------------------
@@ -1221,6 +1225,44 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   // ---- layout -----------------------------------------------------------
 
+  /** Track fader: drag up/down (1 dB per 4 px), wheel ±1 dB, double-click = 0 dB. */
+  function fader(ti: number) {
+    const el = h('div', 'fader');
+    el.title = 'track volume, dB: the whole track with its echoes · drag up/down · double-click = 0';
+    const set = (db: number) => {
+      const v = clamp(Math.round(db), TRACK_VOL.min, TRACK_VOL.max);
+      if (v === p.tracks[ti].vol) return;
+      p.tracks[ti].vol = v;
+      flagsChanged(ti);
+    };
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const y0 = e.clientY, v0 = p.tracks[ti].vol;
+      const move = (ev: PointerEvent) => set(v0 + (y0 - ev.clientY) / 4);
+      const up = () => {
+        el.removeEventListener('pointermove', move);
+        el.removeEventListener('pointerup', up);
+        el.removeEventListener('pointercancel', up);
+      };
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+    });
+    el.addEventListener('dblclick', () => set(0));
+    let acc = 0; // trackpads send many small deltas: 1 dB per ~30 px of scroll
+    el.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      acc -= e.deltaY;
+      if (Math.abs(acc) < 30 && Math.abs(e.deltaY) < 30) return;
+      set(p.tracks[ti].vol + Math.sign(acc));
+      acc = 0;
+    }, { passive: false });
+    return el;
+  }
+
   function button(label: string, cls: string, onClick: () => void) {
     const b = h('button', cls, label);
     b.addEventListener('click', onClick);
@@ -1339,6 +1381,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       });
       const toggles = h('div', 'toggles');
       if (!td.global) toggles.append(
+        fader(ti),
         button('M', 'tog mute', () => { p.tracks[ti].mute = !p.tracks[ti].mute; flagsChanged(ti); }),
         button('S', 'tog solo', () => { p.tracks[ti].solo = !p.tracks[ti].solo; flagsChanged(ti); }),
       );

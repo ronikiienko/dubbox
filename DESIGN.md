@@ -334,6 +334,7 @@ worklet → main:
 ```
 - The timeline is one canvas, virtualized (only visible steps are drawn).
 - ■ on, bar lines + numbers on the ruler, playhead = vertical line.
+- **Track fader** (in each track's head, before M and S): one volume per track for the whole song, −24…+6 dB in 1 dB steps, shown as its number with a fill. Drag up/down (4 px per dB), wheel ±1 dB, double-click = 0. It scales the whole track after its per-note Level: notes, echoes and the reverb share all together (pure mixing; not on the timeline, not in undo, like mute). Saved per track as `vol` (omitted at 0).
 - **Ruler click** = set the start marker (bar-quantized). Play starts there, and Stop returns there.
 - **FOLLOW** (key `F`): while playing, the view scrolls smoothly with the playhead at 25% from the left. Any manual scroll turns it off, and only you turn it back on (button or `F`): Play never does. The choice is remembered.
 - **Scrolling:** a **trackpad** scrolls both ways like a native view: up/down scrolls the tracks panel, sideways scrolls the song. Both at once, freely (no axis lock). A **mouse wheel** scrolls the song sideways, and over an active note it changes the pitch. That pitch shortcut is off on a trackpad, where vertical drag does it. The first sideways scroll without ⇧ marks the device as a trackpad (remembered in localStorage), since browsers don't report the device.
