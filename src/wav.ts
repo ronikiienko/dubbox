@@ -35,7 +35,7 @@ export class Recorder {
   }
 }
 
-function wav(l: Float32Array[], r: Float32Array[], frames: number, sampleRate: number): ArrayBuffer {
+export function wav(l: Float32Array[], r: Float32Array[], frames: number, sampleRate: number): ArrayBuffer {
   const bytes = 44 + frames * 6;
   const buf = new ArrayBuffer(bytes);
   const v = new DataView(buf);
@@ -71,7 +71,7 @@ function wav(l: Float32Array[], r: Float32Array[], frames: number, sampleRate: n
   return buf;
 }
 
-function mp3(l: Float32Array[], r: Float32Array[], sampleRate: number): Uint8Array<ArrayBuffer>[] {
+export function mp3(l: Float32Array[], r: Float32Array[], sampleRate: number): Uint8Array<ArrayBuffer>[] {
   const enc = new Mp3Encoder(2, sampleRate, 320);
   const out: Uint8Array<ArrayBuffer>[] = [];
   const i16 = (x: Float32Array) => Int16Array.from(x, (v) => Math.round(Math.max(-1, Math.min(1, v)) * 32767));

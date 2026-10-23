@@ -25,6 +25,7 @@ The rest is simplified the same way. There's no piano roll, and I tried to add o
 - **No knobs, no automation lanes.** Click a track name to open its value rows, grouped as Note · Filter · Color · Mix · Sends, and set them per note.
 - **Dub tools:** tape delay with hold-a-key throws, room/spring reverb, tape saturation, mute/solo for live arranging.
 - **REC** records what you hear to WAV or MP3, or a **VIDEO** of the app with its sound (pick this tab when the browser asks).
+- **EXPORT** renders the whole song to WAV or MP3 offline: nothing has to play, and it's faster than realtime.
 
 ## Basics
 

@@ -5,7 +5,8 @@ import {
   exportProject, emptyProject, importProject, scheduleSave,
 } from './state';
 import { audioStream, onEngine, send, startEngine } from './engine/bridge';
-import { Recorder } from './wav';
+import { Recorder, download } from './wav';
+import type { FromExport, ToExport } from './offline/worker';
 import { VideoRecorder } from './video';
 import { type Clip, type Region, type Snapshot, clear, copy, paste, restore, snapshot } from './edit';
 
@@ -1038,6 +1039,25 @@ export function mountUI(root: HTMLElement, initial: Project) {
       fmtBtn.textContent = recorder.format.toUpperCase();
     });
     fmtBtn.title = 'REC saves as WAV (24-bit), MP3 (320 kbps) or VIDEO (screen + the app\'s sound; pick this tab when asked)';
+    // EXPORT: the whole song rendered offline (faster than realtime, nothing has to play)
+    const exportBtn = button('EXPORT', 'btn small', () => {
+      if (exportBtn.classList.contains('lit')) return; // already rendering
+      const format = recorder.format === 'mp3' ? 'mp3' : 'wav';
+      const w = new Worker(new URL('./offline/worker.ts', import.meta.url), { type: 'module' });
+      exportBtn.classList.add('lit');
+      w.onmessage = (e: MessageEvent<FromExport>) => {
+        const m = e.data;
+        if (m.t === 'progress') exportBtn.textContent = m.f >= 1 ? 'ENCODING' : `EXPORT ${Math.floor(m.f * 100)}%`;
+        else {
+          download(m.data, m.type, m.ext);
+          w.terminate();
+          exportBtn.classList.remove('lit');
+          exportBtn.textContent = 'EXPORT';
+        }
+      };
+      w.postMessage({ project: p, format } satisfies ToExport);
+    });
+    exportBtn.title = 'render the whole song to a file without playing it (MP3 when the REC format is MP3, else WAV)';
     followBtn = button('FOLLOW', 'btn small lit', () => setFollow(!follow));
     followBtn.title = 'keep the playhead in view (F)';
     // fullscreen: the app fills the screen, no browser bars (Esc leaves)
@@ -1063,7 +1083,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     });
     header.append(
       h('div', 'logo', 'DUBBOX'),
-      playBtn, recBtn, fmtBtn, followBtn, loopBtn,
+      playBtn, recBtn, fmtBtn, exportBtn, followBtn, loopBtn,
       h('div', 'spacer'),
       fullBtn,
       helpBtn = button('?', 'btn small help-btn', () => setHelp(!helpOpen)),

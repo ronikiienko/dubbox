@@ -295,6 +295,7 @@ worklet → main:
 
 - **REC** button: records the master output in realtime while you perform. The worklet streams chunks, and on stop it encodes a **24-bit WAV** or a **320 kbps MP3** (the WAV/MP3 toggle next to REC, remembered in localStorage; LAME via `@breezystack/lamejs`) and downloads it (`dubbox-<date>.wav` / `.mp3`). MP3 needs a 32/44.1/48 kHz context, otherwise it falls back to WAV.
 - **VIDEO** (third REC format): REC asks the browser to share a screen/tab (Chrome offers the current tab first; pick it), then records that picture with the engine's own audio taken straight from the graph (a `MediaStreamAudioDestinationNode`, so it's clean, no mic) via `MediaRecorder`: MP4 (H.264 + AAC) where the browser can encode it, otherwise WebM; 60 fps, 8 Mbit/s video, 256 kbit/s audio. Stops with REC or the browser's own "Stop sharing". The format can't change mid-recording. Code: `video.ts`.
+- **EXPORT** button: renders the whole song **offline**, without playing it and faster than realtime. A Web Worker runs the same engine code (`worklet.ts`, with the AudioWorklet globals shimmed, `offline/shim.ts`) at 48 kHz from bar 1 to one bar past the last note. It then stops the clock, so held and tied notes release, and keeps rendering until the delay and reverb tails fall below −60 dB for a second (at most 20 s). The file is MP3 when the REC format is MP3, otherwise WAV. Mute/solo apply as in playback, and loops and throws are ignored. The button shows progress, then ENCODING. Code: `offline/worker.ts`.
 - No offline render. The performance *is* the arrangement.
 
 ---
@@ -351,5 +352,6 @@ Candidates for v2, only if missing after real use: MIDI clock out/in, zoom, drif
 - [ ] Holding Q–T throws a track into the delay.
 - [ ] Paint 300 bars' worth of hits by dragging; FOLLOW keeps the playhead in view; ruler click sets the start.
 - [ ] REC → perform → stop → valid WAV downloads.
+- [ ] EXPORT → the whole song downloads, ending after the last note's tail.
 - [ ] Reload page → everything restored.
 - [ ] CPU < 15% of one core on a modern laptop at 48 kHz.
