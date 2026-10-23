@@ -1,4 +1,4 @@
-import { DEFAULT_SCALE, GLOBAL, PARAMS, PARAM_BY_ID, SCALES, TRACKS, lockIds, pitchRange, snap, toIndex } from './params';
+import { DEFAULT_SCALE, GLOBAL, PARAMS, PARAM_BY_ID, SCALES, TRACKS, lockIds, mixId, pitchRange, snap, toIndex } from './params';
 
 export const STEPS_PER_BAR = 16;
 export const SONG_BARS = 300; // 10 min at 120 bpm
@@ -10,7 +10,7 @@ export type StepState = 0 | 1; // off / on
 export interface TrackState {
   s: Uint8Array; // StepState per step
   note: Int8Array; // synths: scale steps from Root (7 per octave); drums: semitones of tune/tone
-  slide: Uint8Array; // 1 = glide into the next step (synths)
+  slide: Uint8Array; // 1 = hold into the next note and glide into it (synths)
   locks: Record<string, Uint8Array>; // per lockable param: detent index per step, NO_LOCK = use the knob
   mute: boolean;
   solo: boolean;
@@ -24,7 +24,7 @@ export function audible(tracks: TrackState[], i: number): boolean {
 export const NO_LOCK = 255;
 
 export interface Project {
-  version: 4;
+  version: 5;
   params: Record<string, number>; // normalized base values
   tracks: TrackState[];
 }
@@ -44,7 +44,7 @@ function emptyTrack(i: number): TrackState {
 
 export function emptyProject(): Project {
   return {
-    version: 4,
+    version: 5,
     params: Object.fromEntries(PARAMS.map((d) => [d.id, d.defN])),
     tracks: TRACKS.map((_, i) => emptyTrack(i)),
   };
@@ -63,14 +63,14 @@ interface SavedTrack {
 }
 
 interface SavedProject {
-  version: 4;
+  version: 5;
   params: Record<string, number>;
   tracks: SavedTrack[];
 }
 
 function serialize(p: Project): SavedProject {
   return {
-    version: 4,
+    version: 5,
     params: p.params,
     tracks: p.tracks.map((tr, ti) => {
       const hits: Hit[] = [];
@@ -86,6 +86,28 @@ function serialize(p: Project): SavedProject {
       return { hits, locks, mute: tr.mute, solo: tr.solo };
     }),
   };
+}
+
+/** Synth Length was removed (a slid note now holds into the next one). Held notes become slides:
+ *  tie → slid into the next note; N steps → slid into a copy of itself N steps on, where it fades. */
+const OLD_LENGTH = [0, 1, 2, 3, 4, 6, 8, 16, Infinity];
+function lengthToSlides(tr: TrackState, ti: number, l: [number, number][] | undefined) {
+  for (const [si, idx] of l ?? []) {
+    const len = OLD_LENGTH[idx] ?? 0;
+    if (!len || si < 0 || si >= SONG_STEPS || !tr.s[si] || tr.slide[si]) continue;
+    let next = si + 1;
+    while (next < SONG_STEPS && !tr.s[next]) next++;
+    if (len === Infinity) {
+      if (next < SONG_STEPS) tr.slide[si] = 1;
+      continue;
+    }
+    const end = si + len;
+    if (next <= end || end >= SONG_STEPS) continue; // the next note came first: it still retriggers there
+    tr.slide[si] = 1;
+    tr.s[end] = 1;
+    tr.note[end] = tr.note[si];
+    for (const [id, arr] of Object.entries(tr.locks)) arr[end] = id === mixId(ti, 'rat') ? NO_LOCK : arr[si];
+  }
 }
 
 // v1 = one 16-step loop per track with its own length.
@@ -139,6 +161,11 @@ function deserialize(raw: { version?: number; params?: Record<string, number>; t
         if (!arr) continue;
         const max = PARAM_BY_ID[id].positions - 1;
         for (const [si, idx] of l) if (si >= 0 && si < SONG_STEPS) arr[si] = Math.min(idx, max);
+      }
+      if (TRACKS[i].slide && (raw.version ?? 1) < 5) {
+        // before v5 a slide only reached the very next step: one over a gap did nothing, keep it that way
+        for (let k = 0; k < SONG_STEPS; k++) if (tr.slide[k] && !(k + 1 < SONG_STEPS && tr.s[k + 1])) tr.slide[k] = 0;
+        lengthToSlides(tr, i, st.locks?.[`${TRACKS[i].voice[0].split('.')[0]}.len`]);
       }
       tr.mute = !!st.mute;
       tr.solo = !!st.solo;

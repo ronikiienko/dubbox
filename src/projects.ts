@@ -1,7 +1,7 @@
 // The projects screen: every song in the library, newest first. Click one to open it; rename, copy,
 // export, duplicate or delete it in its row. ⌘V (or PASTE) imports a copied project.
 
-import { copy, currentMeta, duplicate, exportAll, exportFile, importText, list, remove, rename, type ProjectMeta } from './library';
+import { copy, currentMeta, discardCurrent, duplicate, exportAll, exportFile, importText, list, needsKeepOrDiscard, remove, rename, type ProjectMeta } from './library';
 
 export interface ProjectsHost {
   open(id: string): Promise<void>; // switch the app to this project
@@ -137,7 +137,7 @@ export function showProjects(host: ProjectsHost) {
     file,
   );
   const rows = h('div', 'projects-list');
-  const foot = h('div', 'projects-foot', 'Projects are kept in this browser. Use EXPORT ALL now and then for a backup, since clearing the browser’s site data deletes them.');
+  const foot = h('div', 'projects-foot', 'Projects are kept in this browser. NEW makes a draft: leaving it asks whether to keep it, and empty ones just disappear. Use EXPORT ALL now and then for a backup, since clearing the browser’s site data deletes them.');
   panel.append(top, rows, status, foot);
 
   async function render() {
@@ -166,7 +166,7 @@ export function showProjects(host: ProjectsHost) {
           if (m.id === currentMeta().id) host.renamed();
         });
         const info = h('div', 'project-info');
-        info.append(h('div', '', length(m)), h('div', 'dim', ago(m.modified)));
+        info.append(h('div', '', length(m)), h('div', 'dim', (m.draft ? 'draft · ' : '') + ago(m.modified)));
         const acts = h('div', 'project-acts');
         acts.append(
           button('COPY', 'copy to the clipboard: paste it into a chat, then ⌘V in PROJECTS to import', async () => {
@@ -224,4 +224,45 @@ export function showProjects(host: ProjectsHost) {
   addEventListener('keydown', onKey, true);
   addEventListener('paste', onPaste);
   void render();
+}
+
+/**
+ * Leaving the open project: a draft with notes asks first. Keep (with a name) or Discard go ahead,
+ * Cancel (or Esc) stays. Resolves true when it's fine to leave.
+ */
+export async function okToLeave(): Promise<boolean> {
+  if (!(await needsKeepOrDiscard())) return true;
+  return new Promise((resolve) => {
+    const back = h('div', 'projects-back keep-back');
+    const box = h('div', 'projects keep');
+    const name = h('input', 'project-name');
+    name.value = currentMeta().name;
+    name.spellcheck = false;
+    const done = async (choice: 'keep' | 'discard' | 'cancel') => {
+      removeEventListener('keydown', onKey, true);
+      back.remove();
+      if (choice === 'keep') await rename(currentMeta(), name.value);
+      if (choice === 'discard') await discardCurrent();
+      resolve(choice !== 'cancel');
+    };
+    const onKey = (e: KeyboardEvent) => {
+      e.stopPropagation(); // nothing else reacts while this asks
+      if (e.key === 'Enter') void done('keep');
+      if (e.key === 'Escape') void done('cancel');
+    };
+    const row = h('div', 'keep-row');
+    row.append(
+      button('KEEP', 'keep it in PROJECTS (Enter)', () => void done('keep')),
+      button('DISCARD', 'throw this draft away', () => void done('discard')),
+      h('div', 'spacer'),
+      button('CANCEL', 'stay here (Esc)', () => void done('cancel')),
+    );
+    box.append(h('div', 'keep-title', 'Keep this draft?'), name, row);
+    back.append(box);
+    back.addEventListener('click', (e) => e.target === back && void done('cancel'));
+    addEventListener('keydown', onKey, true);
+    document.body.append(back);
+    name.focus();
+    name.select();
+  });
 }

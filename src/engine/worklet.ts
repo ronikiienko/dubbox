@@ -1,7 +1,7 @@
 // The whole engine: clock, sequencer, voices, mixer, FX, master.
 // Runs on the audio thread. Talks to the UI only through `port` (see bridge.ts).
 
-import { ATTACK, GLOBAL, LENGTH, PARAMS, RATCHET, lvlGain, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
+import { ATTACK, GLOBAL, PARAMS, RATCHET, lvlGain, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
 import { NO_LOCK, audible, type TrackState } from '../state';
 import type { FromEngine, ToEngine } from './bridge';
 import { SVF, Smooth, timeCoef } from './dsp';
@@ -33,7 +33,8 @@ class Engine extends AudioWorkletProcessor {
   private globalDefs = lockIds(GLOBAL).map((id) => PARAM_BY_ID[id]);
   private gv: Record<string, number> = {}; // GLOBAL values in force now (normalized)
   private curK = new Int32Array(N).fill(-1); // step of the note now sounding, -1 = none yet
-  private glideOn = new Array<boolean>(N).fill(false); // slid note: values glide into the next note
+  private glideOn = new Array<boolean>(N).fill(false); // slid note: holds, and its values glide into the next note…
+  private glideTo = new Int32Array(N); // …which is on this step
 
   // transport
   private playing = false;
@@ -137,7 +138,6 @@ class Engine extends AudioWorkletProcessor {
         for (const v of this.voices) {
           if (!(v instanceof Synth)) continue;
           v.setHold(false);
-          v.gate(0);
         }
         this.curK.fill(-1);
         this.glideOn.fill(false);
@@ -199,10 +199,11 @@ class Engine extends AudioWorkletProcessor {
     const R = this.R;
     const k = this.curK[t];
     const glide = this.glideOn[t];
-    const frac = glide ? Math.min(1, Math.max(0, this.phase - k)) : 0;
+    const to = this.glideTo[t];
+    const frac = glide ? Math.min(1, Math.max(0, (this.phase - k) / (to - k))) : 0;
     for (const d of this.lockDefs[t]) {
       let n = this.lockValue(t, d, k);
-      if (glide) n += (this.lockValue(t, d, k + 1) - n) * frac;
+      if (glide) n += (this.lockValue(t, d, to) - n) * frac;
       R[d.id] = toReal(d, n);
     }
 
@@ -226,9 +227,21 @@ class Engine extends AudioWorkletProcessor {
       case 5: this.chord.set(R['chord.lp'], R['chord.res'], R['chord.decay'], R.root, ATTACK[R['chord.atk']]); break;
       case 6: this.mel.set(R['mel.lp'], R['mel.res'], R['mel.decay'], R.root, ATTACK[R['mel.atk']]); break;
     }
+    const v = this.voices[t];
+    if (glide && v instanceof Synth) v.slidePos(frac);
   }
 
   private iv = new Float64Array(4);
+  private ivTo = new Float64Array(4);
+
+  private sizeDef = PARAM_BY_ID['chord.size'];
+
+  /** The first note on track t after step k, or -1. */
+  private nextNote(t: number, k: number): number {
+    const s = this.tracks[t].s;
+    for (let j = k + 1; j < this.total; j++) if (s[j]) return j;
+    return -1;
+  }
 
   /** A note with Ratchet > 1×: schedule its extra hits evenly inside the step. */
   private armRatchet(t: number, pitch: number) {
@@ -260,16 +273,18 @@ class Engine extends AudioWorkletProcessor {
       const tr = this.tracks[t];
       const v = this.voices[t];
       const s = tr.s[k];
+      // the note before slid into this one: glide, don't retrigger
+      const slidIn = !!s && this.glideOn[t] && this.glideTo[t] === k;
       if (s) {
         // this note's values take over the track until the next note
         this.curK[t] = k;
-        this.glideOn[t] = !!tr.slide[k] && k + 1 < this.total && !!tr.s[k + 1];
+        this.glideTo[t] = tr.slide[k] ? this.nextNote(t, k) : -1;
+        this.glideOn[t] = this.glideTo[t] > k;
         this.applyTrack(t);
       }
       if (!audible(this.tracks, t)) {
         if (v instanceof Synth) {
           v.setHold(false);
-          v.gate(0);
         }
         continue;
       }
@@ -283,17 +298,19 @@ class Engine extends AudioWorkletProcessor {
           semi = stepToSemi(scale, tr.note[k]);
           if (iv) chordIntervals(scale, this.R['chord.size'], tr.note[k], iv);
         }
-        // 303 slide: a slid step holds its note and glides into this one instead of retriggering
-        const slidIn = k > 0 && tr.s[k - 1] && tr.slide[k - 1];
-        if (s && slidIn) v.glide(semi, iv);
+        // slide: a slid note holds into the next note (wherever it is), its pitch moving there in a straight line
+        if (s && slidIn) v.arrive(semi, iv);
         else if (s) v.trigger(semi, iv);
         if (s) {
           this.armRatchet(t, semi);
-          // Length: hold this many steps at the current tempo (tie = until the next note)
-          const len = LENGTH[this.R[this.hpIds[t].slice(0, this.hpIds[t].indexOf('.')) + '.len']];
-          v.gate(len * ((this.sr * 60) / this.R.tempo / 4));
+          v.setHold(this.glideOn[t]);
+          if (this.glideOn[t]) {
+            const to = this.glideTo[t];
+            const ivTo = iv ? this.ivTo : undefined;
+            if (ivTo) chordIntervals(this.R.scale, toReal(this.sizeDef, this.lockValue(t, this.sizeDef, to)), tr.note[to], ivTo);
+            v.slideTo(stepToSemi(this.R.scale, tr.note[to]), ivTo);
+          }
         }
-        v.setHold(!!s && !!tr.slide[k]);
       } else if (s) {
         v.trigger(tr.note[k]);
         this.armRatchet(t, tr.note[k]);

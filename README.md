@@ -34,6 +34,7 @@ The rest is simplified the same way. There's no piano roll, and I tried to add o
 | Play / stop | `Space` |
 | Place / remove notes | click a step, drag sideways to paint |
 | Pitch | drag a note up/down, or wheel over it |
+| Held note / slide (synths) | `⌥`-drag right / `⌥`-click |
 | Per-note values | click a track name, then drag in its rows |
 | Magnify a row | hold `⌥` over it |
 | Ramp | `⇧`-drag in a value row |
@@ -51,7 +52,6 @@ Press **?** in the app for the full list.
 ## Todo: current challenges
 
 - **Balancing simplicity and flexibility,** especially with effects. Right now they're quite limited and premade, but a full mixer with effect chains would bring back the overwhelm this app is trying to avoid. The goal is to find the middle ground.
-- **A bit more synth options,** like attack, or some other way to get long, continuous sounds (pads, drones) instead of only one-shots.
 
 ## Run locally
 

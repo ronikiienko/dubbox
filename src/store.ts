@@ -9,6 +9,7 @@ export interface ProjectMeta {
   tempo: number; // bpm at bar 1
   bars: number; // up to the last note
   map: string[]; // per instrument track, one char per bar: '0'..'3' = how busy (the list's overview)
+  draft?: boolean; // made by NEW and not kept yet: leaving it asks keep or discard
 }
 
 export interface ProjectStore {

@@ -163,3 +163,8 @@ header {
 .project-acts { display: flex; gap: 4px; }
 .projects-status { min-height: 28px; padding: 6px 16px; color: var(--text); font-size: 12px; display: flex; align-items: center; gap: 6px; }
 .projects-foot { padding: 0 16px 12px; color: var(--dim); font-size: 11px; }
+.keep-back { z-index: 30; padding-top: 22vh; }
+.keep { width: min(420px, calc(100vw - 32px)); padding: 16px; gap: 12px; }
+.keep-title { color: var(--accent); letter-spacing: 0.1em; }
+.keep .project-name { border-color: var(--line); background: var(--bg); }
+.keep-row { display: flex; gap: 8px; }

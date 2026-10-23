@@ -239,7 +239,6 @@ export class Snare implements Voice {
 }
 const SNARE_GAIN = [1.26, 1.43, 4.5]; // loudness match at Snap 0 / 0.5 / 1 (measured)
 
-const HOLD_LEVEL = 0.3;
 const DB_PER_OCTAVE = -2; // higher notes sound louder (esp. on small speakers), so tilt them down
 
 /**
@@ -256,19 +255,18 @@ export class Synth implements Voice {
   private ladder = new Ladder();
   private cutSm: Smooth;
   private env = 0; // amp envelope
-  private fenv = 0; // filter envelope: always decays, even during a slide (like a 303)
+  private fenv = 0; // filter envelope (the pluck): none while a note slides
   private attacking = false;
   private atkInc: number;
   private dec = 0;
   private envAmt = 3; // filter envelope depth, octaves
-  private note = 0; // current pitch in semitones (float while gliding)
-  private target = 0;
-  private cur: Float64Array; // per-oscillator offset from the base note (float while gliding)
+  private note = 0; // current pitch in semitones (float while sliding)
+  private cur: Float64Array; // per-oscillator offset from the base note (float while sliding)
   private tgt: Float64Array;
-  private gliding = false;
-  private glideA: number; // per-block glide coefficient (~60 ms, like a 303)
-  private hold = false; // slide: sustain the envelope into the next step
-  private gateLeft = 0; // Length: samples the note holds at full level before Decay (Infinity = tie)
+  private from: Float64Array; // slide: where the pitch set off from…
+  private fromNote = 0;
+  private toNote = 0; // …and where it's heading
+  private hold = false; // slide: no fading and no pluck until the next note
   private keyGain = 1; // loudness compensation for the current pitch
   private cutoff = 500;
   private res = 0;
@@ -283,13 +281,13 @@ export class Synth implements Voice {
     const n = detune.length;
     this.cur = new Float64Array(n);
     this.tgt = new Float64Array(n);
+    this.from = new Float64Array(n);
     this.ph = new Float64Array(n).map(() => Math.random());
     this.dt = new Float64Array(n);
     this.drift = new Float64Array(n);
     this.driftTarget = new Float64Array(n);
     this.atkInc = 1 / (0.002 * sr);
     this.cutSm = new Smooth(500, timeCoef(0.01, sr));
-    this.glideA = 1 - Math.exp(-128 / (0.06 * sr));
   }
 
   /** Called once per block. */
@@ -301,10 +299,6 @@ export class Synth implements Voice {
     // analog drift: slow random wander of ±4 cents
     if (++this.blockCount % 64 === 0) {
       for (let i = 0; i < this.drift.length; i++) this.driftTarget[i] = this.noise.next() * 4;
-    }
-    if (this.gliding) {
-      this.note += (this.target - this.note) * this.glideA;
-      for (let i = 0; i < this.cur.length; i++) this.cur[i] += (this.tgt[i] - this.cur[i]) * this.glideA;
     }
     // chords stay in one register, so only mono notes need it
     this.keyGain = this.chord ? 1 : Math.pow(10, (DB_PER_OCTAVE * this.note) / 12 / 20);
@@ -331,25 +325,33 @@ export class Synth implements Voice {
   trigger(note: number, iv?: ArrayLike<number>) {
     this.voice(note, iv);
     this.cur.set(this.tgt);
-    this.note = this.target = note;
-    this.gliding = false;
+    this.note = note;
     this.attacking = true;
   }
 
-  /** Slide into a note: glide the pitch, don't retrigger the envelope. */
-  glide(note: number, iv?: ArrayLike<number>) {
+  /** Arrive at the note a slide was heading for: exactly on its pitch, nothing retriggers. */
+  arrive(note: number, iv?: ArrayLike<number>) {
     this.voice(note, iv);
-    this.target = note;
-    this.gliding = true;
+    this.cur.set(this.tgt);
+    this.note = note;
+  }
+
+  /** Start sliding from the current pitch toward this note; slidePos moves along the way. */
+  slideTo(note: number, iv?: ArrayLike<number>) {
+    this.from.set(this.cur);
+    this.fromNote = this.note;
+    this.voice(note, iv);
+    this.toNote = note;
+  }
+
+  /** How far along the slide (0..1): pitch moves in a straight line, like every other value. */
+  slidePos(f: number) {
+    for (let i = 0; i < this.cur.length; i++) this.cur[i] = this.from[i] + (this.tgt[i] - this.from[i]) * f;
+    this.note = this.fromNote + (this.toNote - this.fromNote) * f;
   }
 
   setHold(on: boolean) {
     this.hold = on;
-  }
-
-  /** Length: hold full level this many samples once the attack is done (0 = one-shot, Infinity = until the next note). */
-  gate(samples: number) {
-    this.gateLeft = samples;
   }
 
   process() {
@@ -359,13 +361,15 @@ export class Synth implements Voice {
         this.env = 1;
         this.attacking = false;
       }
-      this.fenv = this.env;
+      this.fenv = this.hold ? 0 : this.env;
     } else {
       if (this.env < 1e-5) return 0;
-      // Length holds full level; slide holds a sustain level instead of letting it die
-      if (this.gateLeft > 0) this.gateLeft--;
-      else if (!this.hold || this.env > HOLD_LEVEL) this.env *= this.dec;
-      this.fenv *= this.dec;
+      // a slid note just holds (no fading, no pluck) into the next note; otherwise Decay fades it
+      if (this.hold) this.fenv = 0;
+      else {
+        this.env *= this.dec;
+        this.fenv *= this.dec;
+      }
     }
 
     let osc = 0;

@@ -1,11 +1,11 @@
-import { GLOBAL, LENGTH, PARAM_BY_ID, RATCHET, TRACKS, rowGroups, mixId, describe, pitchRange, fromIndex, lockIds, toIndex, toReal } from './params';
+import { GLOBAL, PARAM_BY_ID, RATCHET, TRACKS, rowGroups, mixId, describe, pitchRange, fromIndex, lockIds, toIndex, toReal } from './params';
 import {
   SONG_STEPS, STEPS_PER_BAR,
   type Project, type StepState, NO_LOCK, audible,
   emptyProject,
 } from './state';
 import { UNTITLED, add, currentMeta, open, scheduleSave } from './library';
-import { projectsOpen, showProjects } from './projects';
+import { okToLeave, projectsOpen, showProjects } from './projects';
 import { audioStream, onEngine, send, startEngine } from './engine/bridge';
 import { Recorder, download } from './wav';
 import type { FromExport, ToExport } from './offline/worker';
@@ -31,7 +31,8 @@ const HELP: [string, string][] = [
   ['click step', 'on / off'],
   ['drag sideways', 'paint steps'],
   ['drag ↕ / wheel on step', 'pitch'],
-  ['⌥-click step', 'slide (synths)'],
+  ['⌥-click step', 'slide: hold into the next note, glide to it'],
+  ['⌥-drag →', 'held note (synths): from here to there'],
   ['click track name', 'per-note values (GLOBAL: tempo, FX…)'],
   ['drag in a value row', 'set · across = draw'],
   ['hold ⌥ over a value row', 'magnify it (numbers, fine drawing)'],
@@ -146,7 +147,19 @@ export function mountUI(root: HTMLElement, initial: Project) {
   // ---- timeline ---------------------------------------------------------
   // One canvas for all lanes, virtualized: only the visible steps are drawn.
 
-  function setStep(ti: number, si: number, st: StepState, note: number, slide = st ? p.tracks[ti].slide[si] : 0) {
+  /** Inside a held note (between a slid note and the next): a note added there keeps the hold going. */
+  function heldAt(ti: number, si: number): 0 | 1 {
+    const tr = p.tracks[ti];
+    if (!TRACKS[ti].slide) return 0;
+    let a = si - 1;
+    while (a >= 0 && !tr.s[a]) a--;
+    if (a < 0 || !tr.slide[a]) return 0;
+    let b = si + 1;
+    while (b < SONG_STEPS && !tr.s[b]) b++;
+    return b < SONG_STEPS ? 1 : 0;
+  }
+
+  function setStep(ti: number, si: number, st: StepState, note: number, slide = st ? (p.tracks[ti].s[si] ? p.tracks[ti].slide[si] : heldAt(ti, si)) : 0) {
     const tr = p.tracks[ti];
     if (tr.s[si] === st && tr.note[si] === note && tr.slide[si] === slide) return;
     commitPending();
@@ -490,6 +503,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
     // main lane: click = toggle on/off · drag sideways = paint · drag vertically = pitch
     let drag: { ti: number; si0: number; last: number; y: number; note: number; mode: 'pending' | 'paint' | 'note'; paint: StepState } | null = null;
+    // ⌥ on a synth lane: click = toggle slide · drag right = a held note (slid start → end note)
+    let hold: { ti: number; si0: number; hi: number; orig: { s: Uint8Array; note: Int8Array; slide: Uint8Array } } | null = null;
     // bar rows: drag up/down = that note's value · drag sideways = draw across notes (absolute height)
     let bars: { ti: number; sub: number; id: string; si0: number; last: number; y: number; idx0: number; rowTop: number; mode: 'pending' | 'nudge' | 'draw' } | null = null;
 
@@ -541,8 +556,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
         return;
       }
       if (e.altKey) {
-        // Alt-click = toggle slide (turns the step on if needed)
-        if (TRACKS[ti].slide) setStep(ti, si, (tr.s[si] || 1) as StepState, tr.note[si], tr.slide[si] ? 0 : 1);
+        if (!TRACKS[ti].slide) return;
+        canvas.setPointerCapture(e.pointerId);
+        hold = { ti, si0: si, hi: si, orig: { s: tr.s.slice(), note: tr.note.slice(), slide: tr.slide.slice() } };
         return;
       }
       canvas.setPointerCapture(e.pointerId);
@@ -556,6 +572,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
       if (selDrag) {
         if (h0.si !== selDrag.s0 || h0.ti !== selDrag.t0) selDrag.moved = true;
         if (selDrag.moved || !selDrag.ruler) updateSel(h0.si, h0.ti);
+        return;
+      }
+      if (hold) {
+        const to = Math.max(hold.si0, h0.si);
+        if (to !== hold.hi) drawHold(to);
         return;
       }
       if (ramp) {
@@ -605,6 +626,20 @@ export function mountUI(root: HTMLElement, initial: Project) {
         setStep(d.ti, d.si0, (tr.s[d.si0] || 1) as StepState, note);
       }
     });
+    /** Put back what the last frame of the held-note drag changed, then hold from the start to `to`. */
+    const drawHold = (to: number) => {
+      const d = hold!;
+      const o = d.orig;
+      for (let i = d.si0; i <= d.hi; i++) setStep(d.ti, i, o.s[i] as StepState, o.note[i], o.slide[i]);
+      d.hi = to;
+      if (to === d.si0) return;
+      const note = o.note[d.si0];
+      setStep(d.ti, d.si0, 1, note, 1);
+      // notes it passes over become points of the hold: their values are where it glides through
+      for (let i = d.si0 + 1; i < to; i++) if (o.s[i]) setStep(d.ti, i, 1, o.note[i], 1);
+      setStep(d.ti, to, 1, o.s[to] ? o.note[to] : note, o.s[to] ? o.slide[to] : 0);
+    };
+
     /** Put back what the last frame of the ramp overwrote, then lay the line over the notes it spans. */
     let rampLo = 0, rampHi = -1;
     const drawRamp = () => {
@@ -629,6 +664,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
         if (!t.playing) t.phase = startStep;
       }
       selDrag = null;
+      if (hold && hold.hi === hold.si0) {
+        // ⌥-click: toggle slide (turns the step on if needed)
+        const tr = p.tracks[hold.ti];
+        setStep(hold.ti, hold.si0, (tr.s[hold.si0] || 1) as StepState, tr.note[hold.si0], tr.slide[hold.si0] ? 0 : 1);
+      }
+      hold = null;
       if (drag?.mode === 'pending') {
         const tr = p.tracks[drag.ti];
         setStep(drag.ti, drag.si0, drag.paint, tr.note[drag.si0]);
@@ -885,20 +926,19 @@ export function mountUI(root: HTMLElement, initial: Project) {
         }
       }
 
-      // Length: a long note draws a band across the steps it holds (up to the next note); lit while it sounds
-      const lenId = ids.find((id) => id.endsWith('.len'));
-      for (let si = Math.max(0, first - 256); lenId && si <= last; si++) {
-        if (!tr.s[si]) continue;
-        const len = LENGTH[toReal(PARAM_BY_ID[lenId], noteValue(ti, lenId, si))];
-        if (!len) continue;
-        const stop = Math.min(SONG_STEPS, si + len);
+      // held notes: a slid note draws a band to the next note, where it glides; lit while it sounds
+      let si = first;
+      while (si > 0 && !tr.s[si]) si--; // a hold may start off-screen to the left
+      for (; TRACKS[ti].slide && si <= last; si++) {
+        if (!tr.s[si] || !tr.slide[si]) continue;
         let e = si + 1;
-        while (e < stop && !tr.s[e]) e++;
-        if (e <= si + 1 || e <= first) continue;
+        while (e < SONG_STEPS && !tr.s[e]) e++;
+        if (e >= SONG_STEPS || e === si + 1) continue; // nothing to hold into / next step (its tie mark shows it)
         const held = t.playing && audible(p.tracks, ti) && t.phase >= si && t.phase < e;
         ctx.fillStyle = held ? mix(COLORS.accentDim, '#ffc566', 0.4) : COLORS.accentDim;
         const xa = Math.round((si + 1) * CELL - x0), xb = Math.round(e * CELL - x0) - (CELL >= 6 ? 1 : 0);
         ctx.fillRect(xa - (CELL >= 6 ? 1 : 0), y + hh * 0.3, xb - xa + (CELL >= 6 ? 1 : 0), hh * 0.4);
+        si = e - 1;
       }
 
       // bar rows of the expanded track: one bar per note, height = value (the magnified one comes last, on top)
@@ -1042,8 +1082,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   function openProjects() {
     showProjects({
-      open: async (id) => switchTo(await open(id)),
-      create: async () => switchTo(await open((await add(UNTITLED, emptyProject())).id)),
+      open: async (id) => {
+        if (await okToLeave()) switchTo(await open(id));
+      },
+      create: async () => {
+        if (await okToLeave()) switchTo(await open((await add(UNTITLED, emptyProject(), Date.now(), true)).id));
+      },
       renamed: () => (projectBtn.textContent = currentMeta().name),
     });
   }

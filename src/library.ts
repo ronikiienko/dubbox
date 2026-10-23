@@ -68,15 +68,17 @@ function uniqueName(base: string, metas: ProjectMeta[]) {
 }
 
 /** Add a song to the library (its name made unique). */
-export async function add(name: string, p: Project, modified = Date.now()): Promise<ProjectMeta> {
+export async function add(name: string, p: Project, modified = Date.now(), draft = false): Promise<ProjectMeta> {
   const meta: ProjectMeta = { id: crypto.randomUUID(), name: uniqueName(name.trim() || UNTITLED, await store.list()), modified, ...summarize(p) };
+  if (draft) meta.draft = true;
   await store.write(meta, toText(p));
   return meta;
 }
 
-/** Make `id` the open project and return its song. */
+/** Make `id` the open project and return its song. Leaving an empty project deletes it: nothing to keep. */
 export async function open(id: string): Promise<Project> {
   await flush();
+  if (current.id && current.id !== id && current.bars === 0) await store.remove(current.id);
   const [meta, text] = await Promise.all([store.list().then((l) => l.find((m) => m.id === id)), store.read(id)]);
   if (!meta || text === undefined) throw new Error(`no project ${id}`);
   current = meta;
@@ -103,8 +105,18 @@ export async function openInitial(): Promise<Project> {
     }
   }
   const last = metas.find((m) => m.id === localStorage.getItem(CURRENT)) ?? newestFirst(metas)[0];
+  // empty songs left over from earlier sessions go
+  for (const m of metas) if (m.bars === 0 && m.id !== last.id) await store.remove(m.id);
   return open(last.id);
 }
+
+/** Leaving the open project: does it need asking about? (a draft with notes in it) */
+export async function needsKeepOrDiscard(): Promise<boolean> {
+  await flush();
+  return !!current.id && !!current.draft && current.bars > 0;
+}
+
+export const discardCurrent = () => remove(current);
 
 export async function list(): Promise<ProjectMeta[]> {
   await flush(); // so the open project's row is up to date
@@ -113,9 +125,14 @@ export async function list(): Promise<ProjectMeta[]> {
 
 export async function rename(meta: ProjectMeta, name: string): Promise<ProjectMeta> {
   const others = (await store.list()).filter((m) => m.id !== meta.id);
+  // naming a draft keeps it
   const next = { ...meta, name: uniqueName(name.trim() || UNTITLED, others) };
+  delete next.draft;
   await store.rename(next);
-  if (meta.id === current.id) current.name = next.name;
+  if (meta.id === current.id) {
+    current.name = next.name;
+    delete current.draft;
+  }
   return next;
 }
 
@@ -128,6 +145,7 @@ export async function remove(meta: ProjectMeta): Promise<() => Promise<void>> {
   if (meta.id === current.id) await flush();
   const text = await store.read(meta.id);
   await store.remove(meta.id);
+  if (meta.id === current.id) current = { ...current, id: '' }; // gone: nothing to save or ask about
   return () => (text === undefined ? Promise.resolve() : store.write(meta, text));
 }
 
