@@ -32,7 +32,8 @@ The rest is simplified the same way. There's no piano roll, and I tried to add o
 | Do | How |
 |---|---|
 | Play / stop | `Space` |
-| Place / remove notes | click a step, drag sideways to paint |
+| Place / remove notes | click a step · drag from an empty step to paint · right-drag to erase |
+| Move a note (with all its values) | drag it sideways |
 | Pitch | drag a note up/down, or wheel over it |
 | Held note / slide (synths) | `⌥`-drag right / `⌥`-click |
 | Per-note values | click a track name, then drag in its rows |

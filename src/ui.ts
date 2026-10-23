@@ -29,7 +29,8 @@ const HELP: [string, string][] = [
   ['1–7 / ⇧1–7', 'mute / solo'],
   ['hold Q W E R T Y U', 'dub throw'],
   ['click step', 'on / off'],
-  ['drag sideways', 'paint steps'],
+  ['drag a note sideways', 'move it (all its values go with it)'],
+  ['drag from an empty step', 'paint notes · right-drag = erase'],
   ['drag ↕ / wheel on step', 'pitch'],
   ['⌥-click step', 'slide: hold into the next note, glide to it'],
   ['⌥-drag →', 'held note (synths): from here to there'],
@@ -501,8 +502,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
       return { si, ti: -1, sub: -1, rowTop: 0, ruler: false };
     };
 
-    // main lane: click = toggle on/off · drag sideways = paint · drag vertically = pitch
-    let drag: { ti: number; si0: number; last: number; y: number; note: number; mode: 'pending' | 'paint' | 'note'; paint: StepState } | null = null;
+    // main lane: click = toggle on/off · drag a note sideways = move it (with all its values) ·
+    // drag from an empty step = paint · right-drag = erase · drag vertically = pitch
+    let drag: { ti: number; si0: number; last: number; y: number; note: number; mode: 'pending' | 'paint' | 'note' | 'move'; paint: StepState; at: number; orig: Snapshot[number] | null } | null = null;
     // ⌥ on a synth lane: click = toggle slide · drag right = a held note (slid start → end note)
     let hold: { ti: number; si0: number; hi: number; orig: { s: Uint8Array; note: Int8Array; slide: Uint8Array } } | null = null;
     // bar rows: drag up/down = that note's value · drag sideways = draw across notes (absolute height)
@@ -524,7 +526,18 @@ export function mountUI(root: HTMLElement, initial: Project) {
       }
     };
 
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // right button erases
     canvas.addEventListener('pointerdown', (e) => {
+      if (e.button === 2) {
+        const { si, ti, sub } = hit(e);
+        if (ti < 0 || sub >= 0 || TRACKS[ti].global) return;
+        canvas.setPointerCapture(e.pointerId);
+        sel = null;
+        pending = snapshot(p);
+        drag = { ti, si0: si, last: si, y: e.clientY, note: 0, mode: 'paint', paint: 0, at: si, orig: null };
+        setStep(ti, si, 0, p.tracks[ti].note[si]);
+        return;
+      }
       if (e.button !== 0) return;
       const { si, ti, sub, rowTop, ruler } = hit(e);
       if (ruler || (e.shiftKey && ti >= 0 && sub < 0)) {
@@ -562,7 +575,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
         return;
       }
       canvas.setPointerCapture(e.pointerId);
-      drag = { ti, si0: si, last: si, y: e.clientY, note: tr.note[si], mode: 'pending', paint: (tr.s[si] ? 0 : 1) as StepState };
+      drag = { ti, si0: si, last: si, y: e.clientY, note: tr.note[si], mode: 'pending', paint: (tr.s[si] ? 0 : 1) as StepState, at: si, orig: null };
     });
     canvas.addEventListener('pointermove', (e) => {
       mouseX = e.offsetX;
@@ -610,14 +623,21 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const d = drag;
       const tr = p.tracks[d.ti];
       if (d.mode === 'pending') {
-        if (si !== d.si0) {
+        if (si !== d.si0 && tr.s[d.si0]) {
+          // started on a note: pick it up
+          d.mode = 'move';
+          d.orig = { s: tr.s.slice(), note: tr.note.slice(), slide: tr.slide.slice(), locks: Object.fromEntries(Object.entries(tr.locks).map(([id, a]) => [id, a.slice()])) };
+        } else if (si !== d.si0) {
           d.mode = 'paint';
           setStep(d.ti, d.si0, d.paint, tr.note[d.si0]);
         } else if (Math.abs(d.y - e.clientY) > 5) {
           d.mode = 'note';
         }
       }
-      if (d.mode === 'paint' && si !== d.last) {
+      if (d.mode === 'move') {
+        const to = clamp(si, 0, SONG_STEPS - 1);
+        if (to !== d.at) moveNote(to);
+      } else if (d.mode === 'paint' && si !== d.last) {
         const dir = si > d.last ? 1 : -1;
         for (let i = d.last + dir; i !== si + dir; i += dir) setStep(d.ti, i, d.paint, tr.note[i]);
         d.last = si;
@@ -626,6 +646,22 @@ export function mountUI(root: HTMLElement, initial: Project) {
         setStep(d.ti, d.si0, (tr.s[d.si0] || 1) as StepState, note);
       }
     });
+    /** Carry the picked-up note to `to`: notes it passes over come back, the one it lands on is replaced. */
+    const moveNote = (to: number) => {
+      const d = drag!;
+      const o = d.orig!;
+      const put = (k: number, from: number) => {
+        setStep(d.ti, k, o.s[from] as StepState, o.note[from], o.slide[from]);
+        for (const id of lockIds(d.ti)) setLock(d.ti, id, k, o.locks[id][from]);
+      };
+      put(d.at, d.at); // the step it was over gets its own note back (or stays empty)
+      if (d.at !== d.si0) put(d.si0, d.si0);
+      d.at = to;
+      if (to === d.si0) return;
+      setStep(d.ti, d.si0, 0, 0);
+      put(to, d.si0);
+    };
+
     /** Put back what the last frame of the held-note drag changed, then hold from the start to `to`. */
     const drawHold = (to: number) => {
       const d = hold!;
