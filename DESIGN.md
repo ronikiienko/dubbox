@@ -143,7 +143,7 @@ The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swi
 - Old saves: global knob settings that differ from the default become GLOBAL values on step 0; v3 CHORD Scale values move to GLOBAL.
 
 ### 3.4 Stepped knobs
-Every knob snaps to fixed positions: **9** by default (0, ⅛ … 1; bipolar knobs have a centre). Exceptions: Root 12 notes, Dly time 5, Swing 50/54/58/62/66/75 %, Tempo whole bpm. Locks are stored as position indices.
+Every knob snaps to fixed positions: **9** by default (0, ⅛ … 1; bipolar knobs have a centre). Exceptions: Root 12 notes, Dly time 9, Swing 50/54/58/62/66/75 %, Tempo whole bpm. Locks are stored as position indices.
 
 Song structure = what you place on the timeline, plus mutes and knob moves performed live.
 
@@ -202,7 +202,7 @@ in ──► [+]──► delayline(time, wow) ──► out
         ▲                    │
         └── tanh ◄─ LP ◄─ HP ◄┘   × feedback
 ```
-- **Time** steps: `1/16, 1/8, 3/16, 1/4, 3/8` (tempo-synced). Default 3/16.
+- **Time**, labelled as **repeats per bar** (tempo-synced): `16, 12, 8, 6, 5⅓, 4, 3, 2⅔, 2 per bar` = `1, 1⅓, 2, 2⅔, 3, 4, 5⅓, 6, 8` grid steps apart (a step is one cell, 4 steps a beat). Up = longer echo. 12, 6 and 3 per bar are **triplets**: notes can't sit between grid cells, but echoes can. 5⅓ and 2⅔ per bar are the dotted ones (3 and 6 steps); 5⅓ (the dub dotted eighth) is the default. 2 per bar is the longest: at 60 bpm it is 2 s, within the 4 s tape buffer. v7 inserted the triplets; older files' positions (1 2 3 4 6 steps) are remapped on load.
 - Delay time changes are **slewed (~300 ms)**, so the pitch smears like tape. Fractional read with cubic/linear interpolation.
 - Small wow on the read position: 0.4 Hz sine, ±0.6 ms, plus a tiny random component.
 - **Fbk** 0–1.1. Above 1 it's held in check by `tanh` → blooms instead of exploding.

@@ -123,9 +123,12 @@ export const lockIds = (i: number) => rowGroups(i).flatMap((g) => g.ids);
 
 export const SWING = [50, 54, 58, 62, 66, 75];
 
-/** Delay time positions, in 16ths (labels below). */
-export const DELAY_SIXTEENTHS = [1, 2, 3, 4, 6];
-const DELAY_STEPS = ['1/16', '1/8', '3/16', '1/4', '3/8'];
+/** Delay time positions, in grid steps (16ths), labelled as repeats per bar. 12, 6 and 3 per bar are
+ *  triplets; 5⅓ and 2⅔ per bar are dotted (3 and 6 steps). Before v7 the positions were 1 2 3 4 6. */
+export const DELAY_SIXTEENTHS = [1, 4 / 3, 2, 8 / 3, 3, 4, 16 / 3, 6, 8];
+const DELAY_STEPS = ['16 per bar', '12 per bar', '8 per bar', '6 per bar', '5⅓ per bar', '4 per bar', '3 per bar', '2⅔ per bar', '2 per bar'];
+/** v6 position → today's. */
+export const DELAY_V6 = [0, 2, 4, 5, 7];
 
 /** Ratchet positions: hits per step. */
 export const RATCHET = [1, 2, 3, 4, 6, 8];
@@ -217,7 +220,7 @@ const DESCRIPTIONS: Record<string, string> = {
   lvl: 'Volume in dB. Middle = 0 dB, down to off, up to +12.',
   pan: 'Left ↔ right. Middle = centre.',
   dly: 'Send to this track\'s tape delay.',
-  dtime: 'Echo time, in 16ths. Set on any step, held until changed: change it between notes to bend the tail, like tape.',
+  dtime: 'Echo time, as repeats per bar (4 = once a beat; 5⅓ = the classic dub dotted eighth; 12, 6, 3 = triplets). Set on any step, held until changed: change it between notes to bend the tail, like tape.',
   dfbk: 'How long the echoes repeat. Top = runaway. Set on any step, held until changed: swell a tail after its note.',
   rev: 'Send to the reverb (shared room).',
 };
@@ -296,7 +299,7 @@ export const PARAMS: ParamDef[] = [
       fmt: (v) => (Math.abs(v) < 0.01 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100)),
     }),
     p({ id: mixId(i, 'dly'), label: 'Delay', min: 0, max: 1, def: 0, curve: 'lin' }),
-    p({ id: mixId(i, 'dtime'), label: 'Dly time', min: 0, max: 4, def: 2, curve: 'step', steps: DELAY_STEPS, lane: true }),
+    p({ id: mixId(i, 'dtime'), label: 'Dly time', min: 0, max: 8, def: 4, curve: 'step', steps: DELAY_STEPS, lane: true }),
     p({ id: mixId(i, 'dfbk'), label: 'Dly fbk', min: 0, max: 1.1, def: 0.55, curve: 'lin', lane: true }),
     p({ id: mixId(i, 'rev'), label: 'Reverb', min: 0, max: 1, def: 0, curve: 'lin' }),
     p({ id: mixId(i, 'phs'), label: 'Phaser', min: 0, max: 1, def: 0, curve: 'lin' }),

@@ -1,4 +1,4 @@
-import { DEFAULT_SCALE, GLOBAL, PARAMS, PARAM_BY_ID, SCALES, TRACKS, isLane, lockIds, mixId, pitchRange, snap, toIndex } from './params';
+import { DEFAULT_SCALE, DELAY_V6, GLOBAL, PARAMS, PARAM_BY_ID, SCALES, TRACKS, isLane, lockIds, mixId, pitchRange, snap, toIndex } from './params';
 
 export const STEPS_PER_BAR = 16;
 export const SONG_BARS = 300; // 10 min at 120 bpm
@@ -24,7 +24,7 @@ export function audible(tracks: TrackState[], i: number): boolean {
 export const NO_LOCK = 255;
 
 export interface Project {
-  version: 6;
+  version: 7;
   params: Record<string, number>; // normalized base values
   tracks: TrackState[];
 }
@@ -44,7 +44,7 @@ function emptyTrack(i: number): TrackState {
 
 export function emptyProject(): Project {
   return {
-    version: 6,
+    version: 7,
     params: Object.fromEntries(PARAMS.map((d) => [d.id, d.defN])),
     tracks: TRACKS.map((_, i) => emptyTrack(i)),
   };
@@ -63,14 +63,14 @@ interface SavedTrack {
 }
 
 interface SavedProject {
-  version: 6;
+  version: 7;
   params: Record<string, number>;
   tracks: SavedTrack[];
 }
 
 function serialize(p: Project): SavedProject {
   return {
-    version: 6,
+    version: 7,
     params: p.params,
     tracks: p.tracks.map((tr, ti) => {
       const hits: Hit[] = [];
@@ -120,7 +120,8 @@ function delayToTracks(p: Project, rawGlobal: unknown, rawParams: Record<string,
       if (TRACKS[ti].global) return;
       const arr = tr.locks[mixId(ti, k)];
       // before v4 there were knobs: a knob setting is the value from the top
-      if (typeof rawParams?.[old] === 'number' && snap(d, rawParams[old]) !== d.defN) arr[0] = toIndex(d, snap(d, rawParams[old]));
+      const oldDef = k === 'dtime' ? 2 : d.defN; // v6 time positions (remapped after)
+      if (typeof rawParams?.[old] === 'number' && snap(d, rawParams[old]) !== oldDef) arr[0] = toIndex(d, snap(d, rawParams[old]));
       for (const [si, idx] of locks[old] ?? []) if (si >= 0 && si < SONG_STEPS) arr[si] = Math.min(idx, d.positions - 1);
     });
   }
@@ -233,6 +234,12 @@ function deserialize(raw: { version?: number; params?: Record<string, number>; t
     }
   });
   if ((raw.version ?? 1) < 6) delayToTracks(p, rawTracks?.[GLOBAL], raw.params);
+  // v7 added triplet echo times between the old ones
+  if ((raw.version ?? 1) < 7)
+    p.tracks.forEach((tr, ti) => {
+      const arr = tr.locks[mixId(ti, 'dtime')];
+      if (arr) for (let k = 0; k < SONG_STEPS; k++) if (arr[k] !== NO_LOCK) arr[k] = DELAY_V6[Math.min(arr[k], 4)];
+    });
   // held rows (GLOBAL, lanes) store only changes: drop values that repeat the one in force
   p.tracks.forEach((tr, ti) => {
     for (const id of lockIds(ti)) {
