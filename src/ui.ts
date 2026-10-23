@@ -37,7 +37,7 @@ const HELP: [string, string][] = [
   ['⌥-drag →', 'held note (synths): from here to there'],
   ['click track name', 'per-note values (GLOBAL: tempo, FX…)'],
   ['drag in a value row', 'set · across = draw'],
-  ['⇧-drag in a value row', 'ramp: straight line across notes'],
+  ['drag in a value row, then hold ⇧', 'ramp: a straight line from that note to the mouse'],
   ['dbl-click value', 'back to default'],
   ['click ruler', 'play from bar'],
   ['drag ruler / ⇧-drag', 'select bars / area'],
@@ -361,11 +361,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
     return d.steps ? d.steps[idx] : d.id === 'tempo' ? String(Math.round(toReal(d, fromIndex(d, idx)))) : d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
   };
 
-  /** Mouse height → position (0..max) in a row, by the geometry it's drawn with. */
-  const idxAt = (ti: number, j: number, y: number) => {
-    const gm = rowGeom(ti, j);
-    return Math.round(clamp(1 - (y - gm.top - gm.pad) / gm.span) * (PARAM_BY_ID[lockIds(ti)[j]].positions - 1));
-  };
 
   /**
    * Match the canvas to the timeline. Resizing a canvas wipes it, so this only touches the size
@@ -566,14 +561,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
       if (sub >= 0) {
         const id = subRows(ti)[sub];
         canvas.setPointerCapture(e.pointerId);
-        if (e.shiftKey) {
-          const idx = idxAt(ti, sub, e.offsetY);
-          ramp = { ti, id, si0: si, idx0: idx, si1: si, idx1: idx, orig: tr.locks[id].slice() };
-          editRow = { ti, id, si };
-          openSlider(ti, id, si, e.offsetY, idx);
-          drawRamp();
-          return;
-        }
         bars = { ti, sub, id, si0: si, last: si, y: e.clientY, idx0: toIndex(PARAM_BY_ID[id], noteValue(ti, id, si)), rowTop, mode: 'pending' };
         editRow = { ti, id, si };
         openSlider(ti, id, si, e.offsetY, bars.idx0);
@@ -640,6 +627,14 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const b = bars;
         const { si } = hit(e);
         const tr = p.tracks[b.ti];
+        if (e.shiftKey) {
+          // ⇧ during the drag: a straight line from the pressed note, at the value set there, to the mouse
+          ramp = { ti: b.ti, id: b.id, si0: b.si0, idx0: slider!.cur, si1: si, idx1: sliderIdx(e.offsetY), orig: tr.locks[b.id].slice() };
+          slider!.si = si;
+          bars = null;
+          drawRamp();
+          return;
+        }
         if (b.mode === 'pending') {
           if (si !== b.si0) b.mode = 'draw';
           else if (Math.abs(b.y - e.clientY) > 4) b.mode = 'nudge';
