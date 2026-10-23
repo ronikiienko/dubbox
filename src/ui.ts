@@ -777,15 +777,29 @@ export function mountUI(root: HTMLElement, initial: Project) {
     ctx.fillRect(0, rowTop + height - 1, w, 1);
     const arr = tr.locks[id];
     let held = g ? noteValue(ti, id, first) : 0;
+    // slides make some values do nothing: Decay of a note that slides on, Attack of a note slid into
+    const isDecay = id.endsWith('.decay') && TRACKS[ti].slide, isAtk = id.endsWith('.atk');
+    let prev = first - 1;
+    while (isAtk && prev >= 0 && !tr.s[prev]) prev--;
+    let slidInto = isAtk && prev >= 0 && !!tr.slide[prev];
     for (let si = first; si <= last; si++) {
       if (!tr.s[si]) continue;
+      let unused = false;
+      if (isAtk) {
+        unused = slidInto;
+        slidInto = !!tr.slide[si];
+      } else if (isDecay && tr.slide[si]) {
+        let e = si + 1;
+        while (e < SONG_STEPS && !tr.s[e]) e++;
+        unused = e < SONG_STEPS; // it holds into a later note
+      }
       const locked = arr[si] !== NO_LOCK;
       if (g && locked) held = fromIndex(d, arr[si]);
       const n = g ? held : noteValue(ti, id, si);
       const x = si * CELL - x0;
       // GLOBAL: set here = bright, held from earlier = dim · notes: every value looks the same
       const lit = g ? 0 : glow(ti, si);
-      ctx.fillStyle = !g ? (lit ? mix(COLORS.bar, '#ffffff', lit) : COLORS.bar) : locked ? COLORS.text : COLORS.line;
+      ctx.fillStyle = !g ? (unused ? COLORS.line : lit ? mix(COLORS.bar, '#ffffff', lit) : COLORS.bar) : locked ? COLORS.text : COLORS.line;
       if (d.bipolar) {
         // grows up/down from the centre line (e.g. Pan: up = right, down = left)
         const mid = rowTop + pad + span / 2;
@@ -800,7 +814,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const idx = toIndex(d, n);
         const half = (d.positions - 1) / 2;
         const label = d.steps ? d.steps[idx] : d.id === 'tempo' ? String(Math.round(toReal(d, n))) : d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
-        ctx.fillStyle = !g || locked ? COLORS.text : COLORS.dim;
+        ctx.fillStyle = (!g && !unused) || locked ? COLORS.text : COLORS.dim;
         ctx.fillText(label, x + CELL / 2, rowTop + 7);
       }
     }
