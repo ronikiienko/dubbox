@@ -81,10 +81,11 @@ export function mp3(l: Float32Array[], r: Float32Array[], sampleRate: number): U
   return out;
 }
 
-export function download(data: BlobPart | BlobPart[], type: string, ext: string) {
+/** Download as `<name>.<ext>`; the name defaults to dubbox-<date>. */
+export function download(data: BlobPart | BlobPart[], type: string, ext: string, name = `dubbox-${new Date().toISOString().slice(0, 16).replace(':', '')}`) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(Array.isArray(data) ? data : [data], { type }));
-  a.download = `dubbox-${new Date().toISOString().slice(0, 16).replace(':', '')}.${ext}`;
+  a.download = `${name}.${ext}`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }

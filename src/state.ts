@@ -29,8 +29,6 @@ export interface Project {
   tracks: TrackState[];
 }
 
-const KEY = 'dubbox.project';
-
 // ---- empty project ------------------------------------------------------
 
 function emptyTrack(i: number): TrackState {
@@ -194,33 +192,9 @@ function deserialize(raw: { version?: number; params?: Record<string, number>; t
   return p;
 }
 
-// ---- persistence --------------------------------------------------------
+// ---- text form ----------------------------------------------------------
+// One project as JSON text: what SAVE downloads, what the library stores, what COPY puts on the clipboard.
 
-export function load(): Project {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) return deserialize(JSON.parse(raw));
-  } catch {
-    /* fall through to an empty project */
-  }
-  return emptyProject();
-}
-
-let saveTimer = 0;
-export function scheduleSave(p: Project) {
-  clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => localStorage.setItem(KEY, JSON.stringify(serialize(p))), 500);
-}
-
-export function exportProject(p: Project) {
-  const blob = new Blob([JSON.stringify(serialize(p))], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `dubbox-${new Date().toISOString().slice(0, 16).replace(':', '')}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-export async function importProject(file: File): Promise<Project> {
-  return deserialize(JSON.parse(await file.text()));
-}
+export const toText = (p: Project) => JSON.stringify(serialize(p));
+export const fromText = (text: string) => deserialize(JSON.parse(text));
+export const fromSaved = deserialize; // already-parsed JSON

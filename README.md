@@ -4,7 +4,7 @@ A tiny browser groovebox for dub techno and 90s techno. One screen, one 300-bar 
 
 ### ▶ [Open DUBBOX](https://ronikiienko.github.io/dubbox/)
 
-Runs entirely in the browser (Chrome, Safari, Firefox on desktop). Nothing to install, no account. Your project autosaves in the browser.
+Runs entirely in the browser (Chrome, Safari, Firefox on desktop). Nothing to install, no account. Your projects autosave in the browser.
 
 https://github.com/user-attachments/assets/67a7d3b9-a274-40c2-8971-85e9f0ae70e3
 
@@ -46,7 +46,7 @@ The rest is simplified the same way. There's no piano roll, and I tried to add o
 
 Press **?** in the app for the full list.
 
-**SAVE / LOAD** export and import the project as a JSON file. Use them to move a song between browsers or machines.
+**Projects** live in the browser: click the song name in the header (or `⌘O`) to open, rename, duplicate or delete them. **COPY** puts a song on the clipboard to paste anywhere, and `⌘V` in Projects imports one. **FILE** and **EXPORT ALL** download one song or every song, for backups or moving to another browser. Clearing the browser's site data deletes your projects, so export now and then.
 
 ## Todo: current challenges
 

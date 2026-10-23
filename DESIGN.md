@@ -34,7 +34,10 @@ index.html
 src/
   main.ts          boot AudioContext, load worklet, wire UI <-> engine
   params.ts        THE parameter registry (single source of truth, shared by UI + engine)
-  state.ts         project model, defaults, autosave, save/load JSON
+  state.ts         project model, defaults, JSON text form
+  store.ts         where projects live (IndexedDB; swap for a folder on desktop)
+  library.ts       open project, autosave, import/export, EXPORT ALL
+  projects.ts      the PROJECTS screen
   ui.ts            render screen, knob + step widgets, keyboard
   wav.ts           encode recorded float chunks to WAV or MP3
   video.ts         VIDEO recording: screen capture + engine audio → MP4/WebM
@@ -268,15 +271,16 @@ interface TrackState {
 ```
 - In memory: dense typed arrays. On disk: sparse, only hits as `[step, state, note]`.
 - v1 files (16-step loops) still load: the loop is tiled across the whole song.
-- **Autosave** to `localStorage` (debounced 500 ms). Loads on start.
-- **SAVE** downloads `dubbox-<date>.json`, **LOAD** opens one.
-- **NEW** starts an empty project (with confirm).
+- **A library of projects in the browser**, with no file dialogs needed. The header shows the open project's name; click it (or ⌘O) for **PROJECTS**: every song, newest first, each with its tempo, length, last edit and a tiny overview of where the notes are (tracks × bars). Click a row to open it. In the row: rename (edit the name in place), **COPY** (to the clipboard), **FILE** (download `<name>.json`), **DUP**, **DEL** (with UNDO). At the top: **NEW** (an empty project; nothing is lost, so no confirm), **PASTE** / ⌘V (import copied text), **IMPORT FILE**, **EXPORT ALL** (one `dubbox-library-<date>.json` with every project, which IMPORT/PASTE read back).
+- **Autosave** into the open project, debounced 500 ms and written at once when the page hides. On start the last open project opens. Switching projects stops playback and clears undo, the selection and the loop; the clipboard carries over.
+- **Storage is behind one interface** (`store.ts`: list / read / write / rename / remove). The browser backend is IndexedDB, with metadata and song text in separate stores so the list doesn't load every song, and it asks for persistent storage. A desktop build would swap in a folder of `.json` files. A stored project is the same JSON text a FILE export holds (export adds `name`), so moving between backends is copying text.
+- **Migration:** on first run with an empty library, the old single autosave (`localStorage['dubbox.project']`) becomes "My song", and the old text is kept under `dubbox.project.backup`.
 
 ### Messages
 Defined in `src/engine/bridge.ts`. Param values are **normalized 0..1**. The worklet imports `params.ts` and maps them itself.
 
 main → worklet:
-- `{t:'init', project}` full state when audio starts, and on LOAD/NEW
+- `{t:'init', project}` full state when audio starts, and on switching projects
 - `{t:'param', id, v}`
 - `{t:'step', i, si, s, note}` one step changed
 - `{t:'flags', i, mute, solo}`
@@ -304,7 +308,7 @@ worklet → main:
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│ DUBBOX  ▶ PLAY ● REC FOLLOW   Tempo Swing Root Vol             SAVE LOAD NEW  │
+│ DUBBOX  ▶ PLAY ● REC FOLLOW   Tempo Swing Root Vol                song name  │
 ├───────────────────────────────────────────────────────────────────────────────┤
 │               │ 1               2               3        ◄ ruler  │           │
 │ KICK  [M][S]  │ ■ □ □ □ ■ □ □ □ ■ □ □ □ ■ □ □ □ ■ □ □ □ ■ □ □ ...│ 

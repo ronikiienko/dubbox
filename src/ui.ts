@@ -2,8 +2,10 @@ import { GLOBAL, LENGTH, PARAM_BY_ID, RATCHET, TRACKS, rowGroups, mixId, describ
 import {
   SONG_STEPS, STEPS_PER_BAR,
   type Project, type StepState, NO_LOCK, audible,
-  exportProject, emptyProject, importProject, scheduleSave,
+  emptyProject,
 } from './state';
+import { UNTITLED, add, currentMeta, open, scheduleSave } from './library';
+import { projectsOpen, showProjects } from './projects';
 import { audioStream, onEngine, send, startEngine } from './engine/bridge';
 import { Recorder, download } from './wav';
 import type { FromExport, ToExport } from './offline/worker';
@@ -43,6 +45,7 @@ const HELP: [string, string][] = [
   ['delete', 'clear selection'],
   ['D', 'dice selection / hovered'],
   ['⌘Z / ⇧⌘Z', 'undo / redo'],
+  ['⌘O', 'projects'],
   ['wheel', 'scroll'],
   ['⌘-wheel / pinch · − =', 'zoom out / in'],
 ];
@@ -117,7 +120,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let expanded = -1; // track showing its per-note bar rows
   let closing = -1; // track whose rows are folding away (still drawn until they reach 0)
   let resizeObs: ResizeObserver | undefined;
-  let help: HTMLElement, helpBtn: HTMLButtonElement;
+  let help: HTMLElement, helpBtn: HTMLButtonElement, projectBtn: HTMLButtonElement;
   let helpOpen = false;
   let tracksEl: HTMLElement;
   let mainH = 52; // height of a track's main lane, fitted to the window
@@ -213,6 +216,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
     switch (e.code) {
       case 'KeyZ':
         undo(e.shiftKey);
+        return true;
+      case 'KeyO':
+        openProjects();
         return true;
       case 'KeyC':
         if (sel) clip = copy(p, sel);
@@ -1015,6 +1021,33 @@ export function mountUI(root: HTMLElement, initial: Project) {
     return b;
   }
 
+  // ---- projects ---------------------------------------------------------
+
+  /** Show another song: stop, forget this one's undo history, selection and loop. */
+  function switchTo(next: Project) {
+    if (t.playing) setPlaying(false);
+    p = next;
+    undoStack.length = 0;
+    redoStack = [];
+    pending = null;
+    sel = null;
+    loop = null;
+    startStep = 0;
+    t.phase = t.enginePhase = 0;
+    send({ t: 'init', project: p });
+    send({ t: 'loop', s0: 0, s1: 0 });
+    build();
+    scroller.scrollLeft = 0;
+  }
+
+  function openProjects() {
+    showProjects({
+      open: async (id) => switchTo(await open(id)),
+      create: async () => switchTo(await open((await add(UNTITLED, emptyProject())).id)),
+      renamed: () => (projectBtn.textContent = currentMeta().name),
+    });
+  }
+
   function setHelp(on: boolean) {
     helpOpen = on;
     help.hidden = !on;
@@ -1069,34 +1102,15 @@ export function mountUI(root: HTMLElement, initial: Project) {
     document.onfullscreenchange = () => fullBtn.classList.toggle('lit', !!document.fullscreenElement);
     loopBtn = button('LOOP', 'btn small' + (loop ? ' lit' : ''), toggleLoop);
     loopBtn.title = 'loop the selection, or the current bar (L)';
-    const file = h('input');
-    file.type = 'file';
-    file.accept = 'application/json';
-    file.hidden = true;
-    file.addEventListener('change', async () => {
-      if (!file.files?.[0]) return;
-      p = await importProject(file.files[0]);
-      file.value = '';
-      scheduleSave(p);
-      send({ t: 'init', project: p });
-      build();
-    });
+    projectBtn = button(currentMeta().name, 'btn small project-btn', openProjects);
+    projectBtn.title = 'projects: open, rename, copy, export (⌘O)';
     header.append(
       h('div', 'logo', 'DUBBOX'),
       playBtn, recBtn, fmtBtn, exportBtn, followBtn, loopBtn,
       h('div', 'spacer'),
       fullBtn,
       helpBtn = button('?', 'btn small help-btn', () => setHelp(!helpOpen)),
-      button('SAVE', 'btn small', () => exportProject(p)),
-      button('LOAD', 'btn small', () => file.click()),
-      button('NEW', 'btn small', () => {
-        if (!confirm('Start a new empty project? Unsaved work is lost.')) return;
-        p = emptyProject();
-        scheduleSave(p);
-        send({ t: 'init', project: p });
-        build();
-      }),
-      file,
+      projectBtn,
     );
 
     // tracks: heads | scrolling timeline
@@ -1187,6 +1201,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement && e.target.type !== 'range') return;
+    if (projectsOpen()) return;
     if (e.code === 'Space') {
       e.preventDefault();
       if (!e.repeat) setPlaying(!t.playing);
