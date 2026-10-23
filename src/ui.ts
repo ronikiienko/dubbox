@@ -37,7 +37,6 @@ const HELP: [string, string][] = [
   ['⌥-drag →', 'held note (synths): from here to there'],
   ['click track name', 'per-note values (GLOBAL: tempo, FX…)'],
   ['drag in a value row', 'set · across = draw'],
-  ['hold ⌥ over a value row', 'magnify it (numbers, fine drawing)'],
   ['⇧-drag in a value row', 'ramp: straight line across notes'],
   ['dbl-click value', 'back to default'],
   ['click ruler', 'play from bar'],
@@ -62,10 +61,7 @@ const ROW_MIN = 40; // track lanes: one fixed height, open or closed (the panel 
 const ROW_MAX = 40;
 const RULER_H = 20;
 const PAD = 9;
-const SUB_H = 22; // per-note bar rows of an expanded track
-const HOT_H = 80; // hold ⌥ over a value row: it pops out this tall over its neighbours (a lens)
-const HOT_PAD_TOP = 13; // room for the value numbers
-const HOT_PAD_BOTTOM = 2;
+const SUB_H = 36; // per-note bar rows of an expanded track: tall enough to work in directly
 const GROUP_H = 5; // gap + divider above each group's first row (its name runs down the left)
 /** Per track: row index → name of the group it starts. */
 const GROUP_AT = TRACKS.map((_, i) => {
@@ -128,10 +124,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let tracksEl: HTMLElement;
   let mainH = 52; // height of a track's main lane, fitted to the window
   let spacerEl: HTMLElement;
-  type RowRef = { ti: number; sub: number } | null;
-  let hot: RowRef = null; // the magnified value row (while ⌥ is held over it)
-  let altHeld = false;
-  let gesture = false; // a drag is in progress: the lens stays on its row until it ends
   const rowAnim = new Map<string, number>(); // animated row heights
   let subLabels: HTMLElement[][] = [];
 
@@ -144,6 +136,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let redoStack: Snapshot[] = [];
   let pending: Snapshot | null = null; // taken at gesture start, committed on its first real change
   // ⇧-drag in an open row: a straight line from the press to the mouse, every note on it gets its point
+  let editRow: { ti: number; id: string; si: number } | null = null; // dragging in a value row: the note being set shows its number
   let ramp: { ti: number; id: string; si0: number; idx0: number; si1: number; idx1: number; orig: Uint8Array } | null = null;
 
   // ---- timeline ---------------------------------------------------------
@@ -319,7 +312,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
   // Each track has a main lane; the expanded track adds one bar row per lockable knob.
 
   const subRows = (ti: number) => (ti === expanded || ti === closing ? lockIds(ti) : []);
-  const isHot = (ti: number, j: number) => !!hot && hot.ti === ti && hot.sub === j;
   /** A group's first row carries its caption gap on top; it folds with the row. */
   const gapH = (ti: number, j: number, anim = rowAnim.get(`${ti}:${j}`) ?? SUB_H) =>
     GROUP_AT[ti].has(j) ? GROUP_H * Math.min(1, anim / SUB_H) : 0;
@@ -336,15 +328,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
     for (let k = 0; k < j; k++) y += rowH(ti, k);
     return y;
   };
-  /** The lens: centred on its row, kept inside the timeline. */
-  const lensTop = (ti: number, j: number) =>
-    clamp(subTop(ti, j) + gapH(ti, j) + SUB_H / 2 - HOT_H / 2, RULER_H, Math.max(RULER_H, totalH() - HOT_H));
-  /** Where a row's bars are: in its own slot, or in the lens when magnified. Bars fill pad..bottom. */
+  /** Where a row's bars are. Bars fill pad..bottom. */
   const rowGeom = (ti: number, j: number) => {
-    if (isHot(ti, j)) {
-      const top = lensTop(ti, j);
-      return { top, height: HOT_H, pad: HOT_PAD_TOP, bottom: top + HOT_H - HOT_PAD_BOTTOM, span: HOT_H - HOT_PAD_TOP - HOT_PAD_BOTTOM };
-    }
     const top = subTop(ti, j), height = rowH(ti, j), pad = gapH(ti, j) + 2;
     return { top, height, pad, bottom: top + height - 2, span: height - pad - 2 };
   };
@@ -353,7 +338,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const gm = rowGeom(ti, j);
     return Math.round(clamp(1 - (y - gm.top - gm.pad) / gm.span) * (PARAM_BY_ID[lockIds(ti)[j]].positions - 1));
   };
-  const inLens = (y: number) => !!hot && y >= lensTop(hot.ti, hot.sub) && y < lensTop(hot.ti, hot.sub) + HOT_H;
 
   /**
    * Match the canvas to the timeline. Resizing a canvas wipes it, so this only touches the size
@@ -376,7 +360,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   /**
    * Lanes share the panel's height, so the whole song fits without scrolling. An expanded track's
-   * rows (and the room a hot row grows into) come off the top first; below ROW_MIN the panel scrolls.
+   * rows come off the top first; below ROW_MIN the panel scrolls.
    */
   function fitRows() {
     if (!tracksEl) return;
@@ -389,12 +373,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
     heads.forEach((el) => (el.style.height = `${mainH}px`));
   }
 
-  /** ⌥ held: magnify the row under the mouse, and keep that row until ⌥ is let go (and any drag ends). */
-  function updateLens() {
-    if (gesture) return;
-    if (!altHeld) hot = null;
-    else if (!hot && hover && hover.sub >= 0) hot = { ti: hover.ti, sub: hover.sub };
-  }
 
 
   /** Per frame: ease every row's height toward its target. */
@@ -406,7 +384,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const cur = rowAnim.get(key) ?? SUB_H;
       const target = ti === closing ? 0 : SUB_H;
       const next = Math.abs(target - cur) < 0.5 ? target : cur + (target - cur) * k;
-      el.classList.toggle('hot', isHot(ti, j));
+      el.classList.toggle('hot', !!hover && hover.ti === ti && hover.sub === j); // the row under the mouse
       if (next === cur) return;
       rowAnim.set(key, next);
       el.style.height = `${next + gapH(ti, j, next)}px`;
@@ -490,7 +468,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const si = clamp(Math.floor(x / CELL), 0, SONG_STEPS - 1);
       const y = e.offsetY;
       if (y < RULER_H) return { si, ti: -1, sub: -1, rowTop: 0, ruler: true };
-      if (hot && inLens(y)) return { si, ti: hot.ti, sub: hot.sub, rowTop: lensTop(hot.ti, hot.sub), ruler: false };
       for (let ti = 0; ti < TRACKS.length; ti++) {
         const top = laneTop(ti);
         if (y < top + mainH) return { si, ti, sub: -1, rowTop: top, ruler: false };
@@ -561,14 +538,15 @@ export function mountUI(root: HTMLElement, initial: Project) {
       if (sub >= 0) {
         const id = subRows(ti)[sub];
         canvas.setPointerCapture(e.pointerId);
-        gesture = true;
         if (e.shiftKey) {
           const idx = idxAt(ti, sub, e.offsetY);
           ramp = { ti, id, si0: si, idx0: idx, si1: si, idx1: idx, orig: tr.locks[id].slice() };
+          editRow = { ti, id, si };
           drawRamp();
           return;
         }
         bars = { ti, sub, id, si0: si, last: si, y: e.clientY, idx0: toIndex(PARAM_BY_ID[id], noteValue(ti, id, si)), rowTop, mode: 'pending' };
+        editRow = { ti, id, si };
         return;
       }
       if (TRACKS[ti].global) {
@@ -589,7 +567,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
       mouseX = e.offsetX;
       const h0 = hit(e);
       hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
-      updateLens();
       // over the selection: it can be picked up
       const overSel = !!sel && h0.sub < 0 && h0.ti >= sel.t0 && h0.ti <= sel.t1 && h0.si >= sel.s0 && h0.si < sel.s1;
       canvas.style.cursor = selMove?.moved ? 'grabbing' : overSel ? 'grab' : '';
@@ -622,6 +599,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       if (ramp) {
         const r = ramp;
         r.si1 = h0.si;
+        if (editRow) editRow.si = h0.si; // the ramp's moving end
         r.idx1 = idxAt(r.ti, subRows(r.ti).indexOf(r.id), e.offsetY);
         drawRamp();
         return;
@@ -642,6 +620,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
           const lo = Math.min(b.last, si), hi = Math.max(b.last, si);
           for (let i = lo; i <= hi; i++) if (tr.s[i]) setLock(b.ti, b.id, i, idx);
           b.last = si;
+          if (editRow) editRow.si = si; // drawing: the note under the pen (a nudge keeps its own note)
         }
         return;
       }
@@ -751,14 +730,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
       drag = null;
       bars = null;
       ramp = null;
+      editRow = null;
       pending = null;
-      gesture = false;
-      updateLens(); // ⌥ let go mid-drag: close now
     };
     canvas.addEventListener('pointerleave', () => {
       hover = null;
       mouseX = null;
-      updateLens();
     });
     // Safari sends trackpad pinch as gesture events, not ⌘-wheel
     let gestureScale = 1;
@@ -835,17 +812,16 @@ export function mountUI(root: HTMLElement, initial: Project) {
     ctx.rect(0, rowTop, w, height);
     ctx.clip();
     const { pad, span, bottom } = gm;
-    const showValues = isHot(ti, j) && CELL >= 16;
+    // one number: the note under the mouse, in the row under it (or the row being dragged in)
+    const showValues = editRow ? editRow.ti === ti && editRow.id === id : !!hover && hover.ti === ti && hover.sub === j;
+    const shownAt = editRow ? editRow.si : hover?.si ?? -1; // dragging overrides hover
+    const labels: [string, number, boolean][] = [];
     const inset = CELL >= 11 ? 4 : CELL >= 4 ? 1 : 0;
-    const gap = isHot(ti, j) ? 0 : gapH(ti, j);
+    const gap = gapH(ti, j);
     if (gap) {
       // group divider
       ctx.fillStyle = COLORS.line;
       ctx.fillRect(0, rowTop, w, 1);
-    }
-    if (showValues) {
-      ctx.fillStyle = COLORS.cell;
-      ctx.fillRect(0, rowTop + gap, w, height - gap);
     }
     ctx.fillStyle = COLORS.cell;
     ctx.fillRect(0, rowTop + height - 1, w, 1);
@@ -883,14 +859,22 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const bh = Math.max(2, n * span);
         ctx.fillRect(g ? x : x + inset, bottom - bh, g ? CELL : CELL - 2 * inset, bh); // GLOBAL: one continuous fill
       }
-      if (showValues && (!g || locked || si === first)) {
+      if (showValues && si === shownAt) {
         // position as a number: 0–8, or −4…+4 around the centre for bipolar values
         const idx = toIndex(d, n);
         const half = (d.positions - 1) / 2;
         const label = d.steps ? d.steps[idx] : d.id === 'tempo' ? String(Math.round(toReal(d, n))) : d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
-        ctx.fillStyle = (!g && !unused) || locked ? COLORS.text : COLORS.dim;
-        ctx.fillText(label, x + CELL / 2, rowTop + 7);
+        labels.push([label, si, (!g && !unused) || locked]);
       }
+    }
+    // on a small dark tag along the top, over the bars
+    for (const [label, si, bright] of labels) {
+      const tw = ctx.measureText(label).width;
+      const cx = si * CELL - x0 + CELL / 2;
+      ctx.fillStyle = COLORS.bg;
+      ctx.fillRect(cx - tw / 2 - 2, rowTop + gap + 1, tw + 4, 12);
+      ctx.fillStyle = bright ? COLORS.text : COLORS.dim;
+      ctx.fillText(label, cx, rowTop + gap + 7);
     }
     if (ramp && ramp.ti === ti && ramp.id === id) {
       // the line being drawn
@@ -1029,22 +1013,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
         si = e - 1;
       }
 
-      // bar rows of the expanded track: one bar per note, height = value (the magnified one comes last, on top)
+      // bar rows of the expanded track: one bar per note, height = value
       subRows(ti).forEach((_, j) => {
-        if (!isHot(ti, j) && rowH(ti, j) >= 1) drawRow(ctx, ti, j, first, last, x0, w);
+        if (rowH(ti, j) >= 1) drawRow(ctx, ti, j, first, last, x0, w);
       });
       ctx.globalAlpha = 1;
-    }
-    if (hot && hot.ti < TRACKS.length && hot.sub < subRows(hot.ti).length) {
-      // the lens: a shadowed card over the neighbouring rows
-      const top = lensTop(hot.ti, hot.sub);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fillRect(0, top + 3, w, HOT_H);
-      ctx.fillStyle = COLORS.bg;
-      ctx.fillRect(0, top, w, HOT_H);
-      drawRow(ctx, hot.ti, hot.sub, first, last, x0, w);
-      ctx.strokeStyle = COLORS.line;
-      ctx.strokeRect(0.5, top + 0.5, w - 1, HOT_H - 1);
     }
     ctx.textAlign = 'left';
 
@@ -1190,7 +1163,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const scrollLeft = scroller?.scrollLeft ?? 0;
     heads = [];
     subLabels = [];
-    hot = null;
     names = [];
     root.innerHTML = '';
 
@@ -1340,18 +1312,13 @@ export function mountUI(root: HTMLElement, initial: Project) {
       return;
     }
     if (e.key === 'Meta' || e.key === 'Control') modHeld = true;
-    if (e.key === 'Alt') {
-      e.preventDefault();
-      altHeld = true;
-      updateLens();
-    }
+    if (e.key === 'Alt') e.preventDefault(); // no browser menu focus: ⌥ is for slides
     if ((e.metaKey || e.ctrlKey) && editKey(e)) {
       e.preventDefault();
       return;
     }
     if (e.code === 'Escape') {
       sel = null;
-      hot = null;
       if (helpOpen) setHelp(false);
     }
     if (e.key === '?') setHelp(!helpOpen);
@@ -1382,15 +1349,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
   });
   window.addEventListener('blur', () => {
     modHeld = false;
-    altHeld = false;
-    updateLens();
   });
   window.addEventListener('keyup', (e) => {
     if (e.key === 'Meta' || e.key === 'Control') modHeld = false;
-    if (e.key === 'Alt') {
-      altHeld = false;
-      updateLens();
-    }
     const ti = THROW_KEYS.indexOf(e.code);
     if (ti >= 0) setThrow(ti, false);
   });

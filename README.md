@@ -37,7 +37,6 @@ The rest is simplified the same way. There's no piano roll, and I tried to add o
 | Pitch | drag a note up/down, or wheel over it |
 | Held note / slide (synths) | `⌥`-drag right / `⌥`-click |
 | Per-note values | click a track name, then drag in its rows |
-| Magnify a row | hold `⌥` over it |
 | Ramp | `⇧`-drag in a value row |
 | Select bars / loop them | drag on the ruler, then `L` |
 | Zoom | `⌘`-wheel, pinch, or `−` / `=` |
