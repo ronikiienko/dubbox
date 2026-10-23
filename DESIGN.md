@@ -74,7 +74,7 @@ Copying notes between tracks carries every value by its knob position.
 
 | Module | Knobs | Notes |
 |---|---|---|
-| DELAY | per track, lanes (any step, held): **Time** (stepped), **Fbk**; per-note send; GLOBAL **Tone** | tape echo, the main instrument |
+| DELAY | per track, lanes (any step, held): **Time** (stepped), **Fbk**, **Tone**; per-note send | tape echo, the main instrument |
 | REVERB | **Size** | dark FDN, size and darkness linked |
 | TAPE | **Age** | master: saturation + wow/flutter + hiss + HF loss |
 
@@ -108,7 +108,7 @@ There are **no knobs**. Everything is per note, and the song-wide values are row
 ### 3.1 Per-note values (locks)
 - A track's sound is set **only per note**: its instrument values plus Lvl, Dly, Rev, Phs. There are no knobs at all: song-wide values live on the GLOBAL lane (3.5).
 - **Click a track name** to expand it (one at a time). Under its lane, one row per value shows a **bar per note**, height = its value. There's no "set vs default" look: every note simply has a value, all bars are one tone. (GLOBAL keeps bright = set here, dim = held from earlier.)
-- Rows come in **groups**, each with its name running vertically down the left and a thin divider (5 px gap) above: **Note** (Ratchet, the voice's own values, Decay) · **Filter** (Lowpass, Resonance, Highpass) · **Color** (Distortion, Bitcrush, Phaser) · **Mix** (Level, Pan) · **Sends** (Delay, Dly time, Dly fbk, Reverb; Dly time/fbk are lanes, see 5.2). GLOBAL: **Song** (Scale, Root, Tempo, Swing) · **Delay** (Tone) · **Reverb** · **Master** (Tape age, Volume). Defined in `rowGroups` (`params.ts`).
+- Rows come in **groups**, each with its name running vertically down the left and a thin divider (5 px gap) above: **Note** (Ratchet, the voice's own values, Decay) · **Filter** (Lowpass, Resonance, Highpass) · **Color** (Distortion, Bitcrush, Phaser) · **Mix** (Level, Pan) · **Sends** (Delay, Dly time, Dly fbk, Dly tone, Reverb; the Dly rows are lanes, see 5.2). GLOBAL: **Song** (Scale, Root, Tempo, Swing) · **Reverb** · **Master** (Tape age, Volume). Defined in `rowGroups` (`params.ts`).
 - Rows are **22 px and all work happens right there**: no magnifier, nothing to hold; the precision comes from the slider below. **Pressing in a row pops a tall slider out of that note** (only that one; nothing moves): a rail up to 180 px (12 px per position, a tick each), the value as a bar, its number on a tag on top, floating over the rows with a shadow and kept inside the visible panel. It opens with the note's value right at the mouse, so nothing jumps. Drag up/down = that note's value. Drag sideways = draw: the slider follows the pen and each note gets the pen's height on it. Hold ⇧ during the drag = ramp: it rides the ramp's moving end. Let go = gone. When not dragging, the note under the mouse shows its value on a small dark tag at the top of its row: the position 0–8, −4…+4 for Pan, or the step's name ("80 ms", "9th"). Nothing else shows numbers. Each row's name shows its description on hover, and the row under the mouse lights its name.
 - Drag a bar up/down = set that note's value. Drag across a row = draw values over every note you pass (bar height follows the mouse). Double-click a bar = back to the default.
 - **Ramp: press in a row, set the start value on the slider, then hold ⇧ and move**: a straight line from the pressed note, at the value you set, to the mouse (dashed guide while dragging), the slider riding its end for the end value; every note under it gets its point on the line, snapped to the positions. Moving back un-does the notes you leave. One undo step.
@@ -134,7 +134,7 @@ Values with a neutral "normal" default sit at the **middle position** (4 of 0–
 GLOBAL **Spring** (0 = default) crossfades the shared reverb from the room (FDN) to a **spring tank** with an equal-power curve: per side a feedback delay (37 / 43 ms) whose loop runs through 16 first-order allpasses (a = 0.6) for the dispersive "boing" chirp, LP 4.2 kHz, HP 120 Hz, a soft clip for splash when hit hard, slight modulation. Reverb Size sets the spring's feedback too. Level-matched to the room (tank × 0.33).
 
 ### 3.5 GLOBAL lane
-The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swing, Vol, Delay Tone, Reverb Size, Spring, Tape Age**. (Delay Time and Fbk are per note, per track.)
+The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swing, Vol, Reverb Size, Spring, Tape Age**. (Delay Time, Fbk and Tone are per track, see 5.2.)
 - **No notes to place.** Every step has a value. Expand GLOBAL (click its name) and draw in its rows like any value row: a value set on a step **holds until the next set value**; before the first one, the default. Held stretches are drawn dim, set steps bright (with their value when the row is hot).
 - Double-click a set step = remove it (the previous value holds through). Dice only touches set values (or the hovered step).
 - The GLOBAL lane draws **no note cells**: a thin line with an amber marker wherever a value is set, labelled with what changed (scale name, tempo in bpm, otherwise the value's name). Its open rows draw held values as one continuous fill, not per-step bars.
@@ -143,7 +143,7 @@ The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swi
 - Old saves: global knob settings that differ from the default become GLOBAL values on step 0; v3 CHORD Scale values move to GLOBAL.
 
 ### 3.4 Stepped knobs
-Every knob snaps to fixed positions: **9** by default (0, ⅛ … 1; bipolar knobs have a centre). Exceptions: Root 12 notes, Dly time 9, Swing 50/54/58/62/66/75 %, Tempo whole bpm. Locks are stored as position indices.
+Every knob snaps to fixed positions: **9** by default (0, ⅛ … 1; bipolar knobs have a centre). Exceptions: Root 12 notes, Dly time 9, Dly tone 17, Swing 50/54/58/62/66/75 %, Tempo whole bpm. Locks are stored as position indices.
 
 Song structure = what you place on the timeline, plus mutes and knob moves performed live.
 
@@ -195,7 +195,7 @@ Saturation everywhere is `tanh`. Use 2× oversampling only in the synth filter a
 
 ### 5.2 Tape delay (the important one)
 
-**One tape echo per instrument track.** Its **Time** and **Fbk** are rows in the track's Sends group (next to the per-note send), but they are **lanes**, not per-note values: set on **any step**, note or not, and held until the next change, like GLOBAL rows (drawn as one continuous fill; set = bright, held = dim). Held rows (GLOBAL and lanes) store **only changes**: setting the value already in force stores nothing (it stays dim), and a later change that now repeats the held value is dropped too. Loading cleans up older files the same way. The echo rings after its note, so its time and feedback must be changeable between notes: hit a snare, then bend its tail with a Time change on an empty step, or swell Fbk across bars while nothing plays. Adding, removing or moving notes leaves lane points where they are, and so do note selections (⇧-drag box: copy, cut, move): lanes belong to the timeline, not to notes. Whole-bar sections (ruler) carry them; see 3.2. **Tone** is one GLOBAL colour for all echoes. Changing Time bends that track's echoes (the slew below). Files before v6 had GLOBAL Time/Fbk: its changes are copied to every track's lanes at the same steps, so old songs sound the same. Seven echoes cost about 8% of a core.
+**One tape echo per instrument track.** Its **Time**, **Fbk** and **Tone** are rows in the track's Sends group (next to the per-note send), but they are **lanes**, not per-note values: set on **any step**, note or not, and held until the next change, like GLOBAL rows (drawn as one continuous fill; set = bright, held = dim). Held rows (GLOBAL and lanes) store **only changes**: setting the value already in force stores nothing (it stays dim), and a later change that now repeats the held value is dropped too. Loading cleans up older files the same way. The echo rings after its note, so its settings must be changeable between notes: hit a snare, then bend its tail with a Time change on an empty step, swell Fbk across bars while nothing plays, or darken it with Tone as it fades. Adding, removing or moving notes leaves lane points where they are, and so do note selections (⇧-drag box: copy, cut, move): lanes belong to the timeline, not to notes. Whole-bar sections (ruler) carry them; see 3.2. Changing Time bends that track's echoes (the slew below). Files before v6 had GLOBAL Time/Fbk, before v8 GLOBAL Tone: their changes are copied to every track's lanes at the same steps, so old songs sound the same. Seven echoes cost about 8% of a core.
 
 ```
 in ──► [+]──► delayline(time, wow) ──► out
@@ -206,8 +206,8 @@ in ──► [+]──► delayline(time, wow) ──► out
 - Delay time changes are **slewed (~300 ms)**, so the pitch smears like tape. Fractional read with cubic/linear interpolation.
 - Small wow on the read position: 0.4 Hz sine, ±0.6 ms, plus a tiny random component.
 - **Fbk** 0–1.1. Above 1 it's held in check by `tanh` → blooms instead of exploding.
-- **Tone** (single knob, center = neutral):
-  - left: LP 6 kHz → 800 Hz, HP fixed 120 Hz (dark, warm)
+- **Tone** (per track lane, **17 positions** −8…+8, center = neutral; v9 doubled older files' 9-position indices):
+  - left: LP 6 kHz → 250 Hz, HP fixed 120 Hz (dark, warm → muffled, behind a wall). Curved (`|tone|^1.335`) so the default (−2) stays at ~3.6 kHz: −4 ≈ 1.7 kHz, −6 ≈ 690 Hz, −8 = 250 Hz.
   - right: HP 120 Hz → 1.5 kHz, LP fixed 6 kHz (thin, telephone)
 - Stereo: output L = tap, R = same tap at `time + 11 ms`.
 - 12.5% of the (summed) delay output is also fed into the reverb (fixed).

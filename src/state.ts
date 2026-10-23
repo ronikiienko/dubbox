@@ -24,7 +24,7 @@ export function audible(tracks: TrackState[], i: number): boolean {
 export const NO_LOCK = 255;
 
 export interface Project {
-  version: 7;
+  version: 9;
   params: Record<string, number>; // normalized base values
   tracks: TrackState[];
 }
@@ -44,7 +44,7 @@ function emptyTrack(i: number): TrackState {
 
 export function emptyProject(): Project {
   return {
-    version: 7,
+    version: 9,
     params: Object.fromEntries(PARAMS.map((d) => [d.id, d.defN])),
     tracks: TRACKS.map((_, i) => emptyTrack(i)),
   };
@@ -63,14 +63,14 @@ interface SavedTrack {
 }
 
 interface SavedProject {
-  version: 7;
+  version: 9;
   params: Record<string, number>;
   tracks: SavedTrack[];
 }
 
 function serialize(p: Project): SavedProject {
   return {
-    version: 7,
+    version: 9,
     params: p.params,
     tracks: p.tracks.map((tr, ti) => {
       const hits: Hit[] = [];
@@ -110,18 +110,19 @@ function lengthToSlides(tr: TrackState, ti: number, l: [number, number][] | unde
   }
 }
 
-/** Before v6 delay Time and Feedback were GLOBAL; now each track has its own (lanes: set on any step).
- *  Every track gets GLOBAL's changes at the same steps, so old songs sound the same. */
-function delayToTracks(p: Project, rawGlobal: unknown, rawParams: Record<string, number> | undefined) {
+/** Delay Time and Feedback were GLOBAL before v6, Tone before v8; now each track has its own (lanes: set
+ *  on any step). Every track gets GLOBAL's changes at the same steps, so old songs sound the same. */
+function delayToTracks(p: Project, rawGlobal: unknown, rawParams: Record<string, number> | undefined, version: number) {
   const locks = (rawGlobal as SavedTrack | null | undefined)?.locks ?? {};
-  for (const [old, k] of [['delay.time', 'dtime'], ['delay.fbk', 'dfbk']] as const) {
+  const moved = [['delay.time', 'dtime'], ['delay.fbk', 'dfbk'], ['delay.tone', 'dtone']] as const;
+  for (const [old, k] of moved.filter(([, k]) => version < (k === 'dtone' ? 8 : 6))) {
     const d = PARAM_BY_ID[mixId(0, k)]; // same range and positions as the old GLOBAL value
     p.tracks.forEach((tr, ti) => {
       if (TRACKS[ti].global) return;
       const arr = tr.locks[mixId(ti, k)];
       // before v4 there were knobs: a knob setting is the value from the top
       const oldDef = k === 'dtime' ? 2 : d.defN; // v6 time positions (remapped after)
-      if (typeof rawParams?.[old] === 'number' && snap(d, rawParams[old]) !== oldDef) arr[0] = toIndex(d, snap(d, rawParams[old]));
+      if (typeof rawParams?.[old] === 'number' && snap(d, rawParams[old]) !== oldDef) arr[0] = k === 'dtone' ? Math.round(snap(d, rawParams[old]) * 8) : toIndex(d, snap(d, rawParams[old])); // tone: 9-position index, doubled for v9 below
       for (const [si, idx] of locks[old] ?? []) if (si >= 0 && si < SONG_STEPS) arr[si] = Math.min(idx, d.positions - 1);
     });
   }
@@ -233,7 +234,13 @@ function deserialize(raw: { version?: number; params?: Record<string, number>; t
       p.params[id] = d.defN;
     }
   });
-  if ((raw.version ?? 1) < 6) delayToTracks(p, rawTracks?.[GLOBAL], raw.params);
+  if ((raw.version ?? 1) < 8) delayToTracks(p, rawTracks?.[GLOBAL], raw.params, raw.version ?? 1);
+  // v9: echo Tone has 17 positions (−8…+8), was 9
+  if ((raw.version ?? 1) < 9)
+    p.tracks.forEach((tr, ti) => {
+      const arr = tr.locks[mixId(ti, 'dtone')];
+      if (arr) for (let k = 0; k < SONG_STEPS; k++) if (arr[k] !== NO_LOCK) arr[k] = Math.min(arr[k], 8) * 2;
+    });
   // v7 added triplet echo times between the old ones
   if ((raw.version ?? 1) < 7)
     p.tracks.forEach((tr, ti) => {

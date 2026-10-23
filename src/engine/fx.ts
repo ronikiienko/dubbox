@@ -28,7 +28,8 @@ export class TapeDelay {
   set(timeSamples: number, fbk: number, tone: number) {
     this.target = timeSamples;
     this.fbk = fbk;
-    const lp = tone < 0 ? 6000 * Math.pow(800 / 6000, -tone) : 6000;
+    // dark side: 6 kHz → 250 Hz, curved so −0.25 (the default) stays at ~3.6 kHz
+    const lp = tone < 0 ? 6000 * Math.pow(250 / 6000, Math.pow(-tone, 1.335)) : 6000;
     const hp = tone > 0 ? 120 * Math.pow(1500 / 120, tone) : 120;
     this.lpA = lpCoef(lp, this.sr);
     this.hpA = lpCoef(hp, this.sr);

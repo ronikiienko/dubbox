@@ -234,7 +234,7 @@ class Engine extends AudioWorkletProcessor {
     this.revT[t] = R[mixId(t, 'rev')];
     this.panT[t] = R[mixId(t, 'pan')];
     // this track's echo: time and feedback from the note, colour from GLOBAL
-    this.delays[t].set(DELAY_SIXTEENTHS[R[mixId(t, 'dtime')]] * ((this.sr * 60) / R.tempo / 4), R[mixId(t, 'dfbk')], R['delay.tone']);
+    this.delays[t].set(DELAY_SIXTEENTHS[R[mixId(t, 'dtime')]] * ((this.sr * 60) / R.tempo / 4), R[mixId(t, 'dfbk')], R[mixId(t, 'dtone')]);
     const hpId = this.hpIds[t];
     const hp = hpHz(hpId.slice(0, hpId.indexOf('.')), R[hpId]);
     this.hpOn[t] = hp > 0;

@@ -90,12 +90,12 @@ export const TRACKS: TrackDef[] = [
   // last, so instrument indices (mix ids, keys 1–6) stay put
   {
     name: 'GLOBAL', global: true,
-    voice: ['scale', 'root', 'tempo', 'swing', 'volume', 'delay.tone', 'reverb.size', 'reverb.spring', 'tape.age'],
+    voice: ['scale', 'root', 'tempo', 'swing', 'volume', 'reverb.size', 'reverb.spring', 'tape.age'],
   },
 ];
 export const GLOBAL = TRACKS.length - 1;
 
-export const mixId = (i: number, k: 'rat' | 'dst' | 'crs' | 'phs' | 'lvl' | 'pan' | 'dly' | 'dtime' | 'dfbk' | 'rev') => `mix.${i}.${k}`;
+export const mixId = (i: number, k: 'rat' | 'dst' | 'crs' | 'phs' | 'lvl' | 'pan' | 'dly' | 'dtime' | 'dfbk' | 'dtone' | 'rev') => `mix.${i}.${k}`;
 
 const CORE = ['lp', 'res', 'hp', 'decay'];
 const coreId = (i: number, k: string) => TRACKS[i].voice.find((id) => id.endsWith('.' + k))!;
@@ -104,7 +104,6 @@ const coreId = (i: number, k: string) => TRACKS[i].voice.find((id) => id.endsWit
 export function rowGroups(i: number): { name: string; ids: string[] }[] {
   if (TRACKS[i].global) return [
     { name: 'Song', ids: ['scale', 'root', 'tempo', 'swing'] },
-    { name: 'Delay', ids: ['delay.tone'] },
     { name: 'Reverb', ids: ['reverb.size', 'reverb.spring'] },
     { name: 'Master', ids: ['tape.age', 'volume'] },
   ];
@@ -114,7 +113,7 @@ export function rowGroups(i: number): { name: string; ids: string[] }[] {
     { name: 'Filter', ids: [coreId(i, 'lp'), coreId(i, 'res'), coreId(i, 'hp')] },
     { name: 'Color', ids: [mixId(i, 'dst'), mixId(i, 'crs'), mixId(i, 'phs')] },
     { name: 'Mix', ids: [mixId(i, 'lvl'), mixId(i, 'pan')] },
-    { name: 'Sends', ids: [mixId(i, 'dly'), mixId(i, 'dtime'), mixId(i, 'dfbk'), mixId(i, 'rev')] },
+    { name: 'Sends', ids: [mixId(i, 'dly'), mixId(i, 'dtime'), mixId(i, 'dfbk'), mixId(i, 'dtone'), mixId(i, 'rev')] },
   ];
 }
 
@@ -205,7 +204,6 @@ const DESCRIPTIONS: Record<string, string> = {
   tempo: 'Beats per minute.',
   swing: 'Delays every second 16th.',
   volume: 'Master volume.',
-  'delay.tone': 'Echo colour of every track\'s delay: darker ↔ thinner each repeat.',
   'reverb.size': 'Room length.',
   'reverb.spring': 'Reverb character: room ↔ dub spring tank (boing).',
   'tape.age': 'Tape wear: warmth, wobble, hiss.',
@@ -222,6 +220,7 @@ const DESCRIPTIONS: Record<string, string> = {
   dly: 'Send to this track\'s tape delay.',
   dtime: 'Echo time, as repeats per bar (4 = once a beat; 5⅓ = the classic dub dotted eighth; 12, 6, 3 = triplets). Set on any step, held until changed: change it between notes to bend the tail, like tape.',
   dfbk: 'How long the echoes repeat. Top = runaway. Set on any step, held until changed: swell a tail after its note.',
+  dtone: 'Echo colour: each repeat darker ↔ thinner. Set on any step, held until changed: darken a tail as it fades.',
   rev: 'Send to the reverb (shared room).',
 };
 export const describe = (id: string) => DESCRIPTIONS[id] ?? DESCRIPTIONS[id.slice(id.lastIndexOf('.') + 1)] ?? '';
@@ -301,20 +300,20 @@ export const PARAMS: ParamDef[] = [
     p({ id: mixId(i, 'dly'), label: 'Delay', min: 0, max: 1, def: 0, curve: 'lin' }),
     p({ id: mixId(i, 'dtime'), label: 'Dly time', min: 0, max: 8, def: 4, curve: 'step', steps: DELAY_STEPS, lane: true }),
     p({ id: mixId(i, 'dfbk'), label: 'Dly fbk', min: 0, max: 1.1, def: 0.55, curve: 'lin', lane: true }),
+    p({
+      id: mixId(i, 'dtone'), label: 'Dly tone', min: -1, max: 1, def: -0.25, curve: 'lin', bipolar: true, lane: true, positions: 17,
+      fmt: (v) => (v < -0.05 ? 'dark ' + Math.round(-v * 100) : v > 0.05 ? 'thin ' + Math.round(v * 100) : 'flat'),
+    }),
     p({ id: mixId(i, 'rev'), label: 'Reverb', min: 0, max: 1, def: 0, curve: 'lin' }),
     p({ id: mixId(i, 'phs'), label: 'Phaser', min: 0, max: 1, def: 0, curve: 'lin' }),
   ]),
 
   // fx
-  p({
-    id: 'delay.tone', label: 'Delay tone', min: -1, max: 1, def: -0.25, curve: 'lin', bipolar: true,
-    fmt: (v) => (v < -0.05 ? 'dark ' + Math.round(-v * 100) : v > 0.05 ? 'thin ' + Math.round(v * 100) : 'flat'),
-  }),
   p({ id: 'reverb.size', label: 'Reverb size', min: 0, max: 1, def: 0.5, curve: 'lin', fmt: (v) => (1.5 * Math.pow(14 / 1.5, v)).toFixed(1) + ' s' }),
   p({ id: 'reverb.spring', label: 'Spring', min: 0, max: 1, def: 0, curve: 'lin' }),
   p({ id: 'tape.age', label: 'Tape age', min: 0, max: 1, def: 0.3, curve: 'lin' }),
 ];
 
 export const PARAM_BY_ID: Record<string, ParamDef> = Object.fromEntries(PARAMS.map((d) => [d.id, d]));
-/** Values set on any step and held until changed: every GLOBAL row, and a track's echo time/feedback. */
+/** Values set on any step and held until changed: every GLOBAL row, and a track's echo time/feedback/tone. */
 export const isLane = (ti: number, id: string) => !!TRACKS[ti].global || !!PARAM_BY_ID[id]?.lane;
