@@ -62,7 +62,7 @@ const ROW_MIN = 40; // track lanes: one fixed height, open or closed (the panel 
 const ROW_MAX = 40;
 const RULER_H = 20;
 const PAD = 9;
-const SUB_H = 36; // per-note bar rows of an expanded track: tall enough to work in directly
+const SUB_H = 22; // per-note bar rows of an expanded track (dragging pops out a tall slider)
 const GROUP_H = 5; // gap + divider above each group's first row (its name runs down the left)
 /** Per track: row index → name of the group it starts. */
 const GROUP_AT = TRACKS.map((_, i) => {
@@ -138,6 +138,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let redoStack: Snapshot[] = [];
   let pending: Snapshot | null = null; // taken at gesture start, committed on its first real change
   // ⇧-drag in an open row: a straight line from the press to the mouse, every note on it gets its point
+  // pressing in a value row pops a tall slider out of that note for as long as the drag lasts
+  let slider: { ti: number; id: string; si: number; y0: number; idx0: number; cur: number; max: number; H: number; top: number } | null = null;
   let editRow: { ti: number; id: string; si: number } | null = null; // dragging in a value row: the note being set shows its number
   let ramp: { ti: number; id: string; si0: number; idx0: number; si1: number; idx1: number; orig: Uint8Array } | null = null;
 
@@ -335,6 +337,30 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const top = subTop(ti, j), height = rowH(ti, j), pad = gapH(ti, j) + 2;
     return { top, height, pad, bottom: top + height - 2, span: height - pad - 2 };
   };
+  const SLIDER_STEP = 12, SLIDER_MAX_H = 180, SLIDER_W = 28, SLIDER_LABEL = 16;
+  /** Pop the slider out at note `si`, its value `idx` right at the mouse height `y`. */
+  function openSlider(ti: number, id: string, si: number, y: number, idx: number) {
+    const max = PARAM_BY_ID[id].positions - 1;
+    const H = Math.min(SLIDER_MAX_H, max * SLIDER_STEP);
+    // inside the part of the timeline you can see (the panel scrolls vertically)
+    const view = tracksEl.getBoundingClientRect(), cv = canvas.getBoundingClientRect();
+    const lo = Math.max(RULER_H, view.top - cv.top) + SLIDER_LABEL + 6;
+    const hi = Math.min(totalH(), view.bottom - cv.top) - H - 8;
+    const top = clamp(y - (1 - idx / max) * H, lo, Math.max(lo, hi));
+    slider = { ti, id, si, y0: y, idx0: idx, cur: idx, max, H, top };
+  }
+  /** Mouse height → value on the slider: moves from where it was pressed, SLIDER_STEP px per position. */
+  const sliderIdx = (y: number) => {
+    const sl = slider!;
+    return (sl.cur = clamp(Math.round(sl.idx0 + ((sl.y0 - y) * sl.max) / sl.H), 0, sl.max));
+  };
+  /** A value as the rows print it: 0–8, −4…+4 around the centre, a step's name, or bpm. */
+  const valueLabel = (id: string, idx: number) => {
+    const d = PARAM_BY_ID[id];
+    const half = (d.positions - 1) / 2;
+    return d.steps ? d.steps[idx] : d.id === 'tempo' ? String(Math.round(toReal(d, fromIndex(d, idx)))) : d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
+  };
+
   /** Mouse height → position (0..max) in a row, by the geometry it's drawn with. */
   const idxAt = (ti: number, j: number, y: number) => {
     const gm = rowGeom(ti, j);
@@ -544,11 +570,13 @@ export function mountUI(root: HTMLElement, initial: Project) {
           const idx = idxAt(ti, sub, e.offsetY);
           ramp = { ti, id, si0: si, idx0: idx, si1: si, idx1: idx, orig: tr.locks[id].slice() };
           editRow = { ti, id, si };
+          openSlider(ti, id, si, e.offsetY, idx);
           drawRamp();
           return;
         }
         bars = { ti, sub, id, si0: si, last: si, y: e.clientY, idx0: toIndex(PARAM_BY_ID[id], noteValue(ti, id, si)), rowTop, mode: 'pending' };
         editRow = { ti, id, si };
+        openSlider(ti, id, si, e.offsetY, bars.idx0);
         return;
       }
       if (TRACKS[ti].global) {
@@ -568,7 +596,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
     canvas.addEventListener('pointermove', (e) => {
       mouseX = e.offsetX;
       const h0 = hit(e);
-      hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
+      // while the slider is out, nothing under it reacts: hover stays on the row being dragged in
+      if (!slider) hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
       // over the selection: it can be picked up
       const overSel = !!sel && h0.sub < 0 && h0.ti >= sel.t0 && h0.ti <= sel.t1 && h0.si >= sel.s0 && h0.si < sel.s1;
       canvas.style.cursor = selMove?.moved ? 'grabbing' : overSel ? 'grab' : '';
@@ -602,7 +631,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const r = ramp;
         r.si1 = h0.si;
         if (editRow) editRow.si = h0.si; // the ramp's moving end
-        r.idx1 = idxAt(r.ti, subRows(r.ti).indexOf(r.id), e.offsetY);
+        r.idx1 = sliderIdx(e.offsetY);
+        slider!.si = h0.si; // the slider rides the ramp's moving end
         drawRamp();
         return;
       }
@@ -615,10 +645,10 @@ export function mountUI(root: HTMLElement, initial: Project) {
           else if (Math.abs(b.y - e.clientY) > 4) b.mode = 'nudge';
         }
         if (b.mode === 'nudge' && tr.s[b.si0]) {
-          const max = PARAM_BY_ID[b.id].positions - 1;
-          setLock(b.ti, b.id, b.si0, clamp(b.idx0 + Math.round((b.y - e.clientY) / 8), 0, max));
+          setLock(b.ti, b.id, b.si0, sliderIdx(e.offsetY));
         } else if (b.mode === 'draw') {
-          const idx = idxAt(b.ti, b.sub, e.offsetY);
+          const idx = sliderIdx(e.offsetY);
+          slider!.si = si; // it follows the pen
           const lo = Math.min(b.last, si), hi = Math.max(b.last, si);
           for (let i = lo; i <= hi; i++) if (tr.s[i]) setLock(b.ti, b.id, i, idx);
           b.last = si;
@@ -733,6 +763,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       bars = null;
       ramp = null;
       editRow = null;
+      slider = null;
       pending = null;
     };
     canvas.addEventListener('pointerleave', () => {
@@ -829,7 +860,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const { pad, span, bottom } = gm;
     // one number: the note under the mouse, in the row under it (or the row being dragged in)
     const showValues = editRow ? editRow.ti === ti && editRow.id === id : !!hover && hover.ti === ti && hover.sub === j;
-    const shownAt = editRow ? editRow.si : hover?.si ?? -1; // dragging overrides hover
+    const shownAt = slider ? -1 : editRow ? editRow.si : hover?.si ?? -1; // dragging: the slider shows it
     const labels: [string, number, boolean][] = [];
     const inset = CELL >= 11 ? 4 : CELL >= 4 ? 1 : 0;
     const gap = gapH(ti, j);
@@ -876,9 +907,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       }
       if (showValues && si === shownAt) {
         // position as a number: 0–8, or −4…+4 around the centre for bipolar values
-        const idx = toIndex(d, n);
-        const half = (d.positions - 1) / 2;
-        const label = d.steps ? d.steps[idx] : d.id === 'tempo' ? String(Math.round(toReal(d, n))) : d.bipolar ? (idx > half ? '+' : '') + (idx - half) : String(idx);
+        const label = valueLabel(id, toIndex(d, n));
         labels.push([label, si, (!g && !unused) || locked]);
       }
     }
@@ -1064,6 +1093,45 @@ export function mountUI(root: HTMLElement, initial: Project) {
       ctx.fillStyle = COLORS.text;
       ctx.fillRect(t.phase * CELL - x0, 0, 2, H);
     }
+    if (slider) drawSlider(ctx, x0, w);
+  }
+
+  /** The popped-out slider: a tall rail with a tick per position, the value as a bar, its number on top. */
+  function drawSlider(ctx: CanvasRenderingContext2D, x0: number, w: number) {
+    const sl = slider!;
+    const d = PARAM_BY_ID[sl.id];
+    const cx = clamp(sl.si * CELL - x0 + CELL / 2, SLIDER_W / 2 + 2, w - SLIDER_W / 2 - 2);
+    const left = cx - SLIDER_W / 2, top = sl.top, bottom = sl.top + sl.H;
+    const yOf = (idx: number) => top + (1 - idx / sl.max) * sl.H;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(left + 3, top - 6 + 4, SLIDER_W, sl.H + 12);
+    ctx.fillStyle = COLORS.bg;
+    ctx.fillRect(left, top - 6, SLIDER_W, sl.H + 12);
+    ctx.strokeStyle = COLORS.dim;
+    ctx.strokeRect(left + 0.5, top - 6 + 0.5, SLIDER_W - 1, sl.H + 11);
+    if (sl.max <= 16) {
+      ctx.fillStyle = COLORS.line;
+      for (let k = 0; k <= sl.max; k++) ctx.fillRect(left + 3, Math.round(yOf(k)), SLIDER_W - 6, 1);
+    }
+    ctx.fillStyle = COLORS.bar;
+    const yv = yOf(sl.cur);
+    if (d.bipolar) {
+      const mid = yOf(sl.max / 2);
+      ctx.fillRect(left + 7, Math.min(yv, mid) - 1, SLIDER_W - 14, Math.max(2, Math.abs(mid - yv) + 2));
+    } else {
+      ctx.fillRect(left + 7, yv - 1, SLIDER_W - 14, Math.max(2, bottom - yv + 2));
+    }
+    // the number, on a tag above the rail
+    const label = valueLabel(sl.id, sl.cur);
+    ctx.font = '12px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center';
+    const tw = ctx.measureText(label).width;
+    const lx = clamp(cx, tw / 2 + 3, w - tw / 2 - 3);
+    ctx.fillStyle = COLORS.bg;
+    ctx.fillRect(lx - tw / 2 - 3, top - 6 - SLIDER_LABEL + 1, tw + 6, SLIDER_LABEL - 2);
+    ctx.fillStyle = COLORS.text;
+    ctx.fillText(label, lx, top - 6 - SLIDER_LABEL / 2 + 1);
+    ctx.textAlign = 'left';
   }
 
   // ---- transport --------------------------------------------------------
