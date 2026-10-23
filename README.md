@@ -33,7 +33,7 @@ The rest is simplified the same way. There's no piano roll, and I tried to add o
 |---|---|
 | Play / stop | `Space` |
 | Place / remove notes | click a step · drag from an empty step to paint · right-drag to erase |
-| Move a note (with all its values) | drag it sideways |
+| Move a note (with all its values) | drag it sideways · select first to move many |
 | Pitch | drag a note up/down, or wheel over it |
 | Held note / slide (synths) | `⌥`-drag right / `⌥`-click |
 | Per-note values | click a track name, then drag in its rows |

@@ -30,6 +30,7 @@ const HELP: [string, string][] = [
   ['hold Q W E R T Y U', 'dub throw'],
   ['click step', 'on / off'],
   ['drag a note sideways', 'move it (all its values go with it)'],
+  ['drag inside a selection', 'move the selection'],
   ['drag from an empty step', 'paint notes · right-drag = erase'],
   ['drag ↕ / wheel on step', 'pitch'],
   ['⌥-click step', 'slide: hold into the next note, glide to it'],
@@ -506,6 +507,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
     // drag from an empty step = paint · right-drag = erase · drag vertically = pitch
     let drag: { ti: number; si0: number; last: number; y: number; note: number; mode: 'pending' | 'paint' | 'note' | 'move'; paint: StepState; at: number; orig: Snapshot[number] | null } | null = null;
     // ⌥ on a synth lane: click = toggle slide · drag right = a held note (slid start → end note)
+    // drag inside the selection = move it sideways (whole bars when it spans every track)
+    let selMove: { ti: number; si0: number; base: Snapshot; region: Region; clip: Clip; delta: number; moved: boolean; bars: boolean } | null = null;
     let hold: { ti: number; si0: number; hi: number; orig: { s: Uint8Array; note: Int8Array; slide: Uint8Array } } | null = null;
     // bar rows: drag up/down = that note's value · drag sideways = draw across notes (absolute height)
     let bars: { ti: number; sub: number; id: string; si0: number; last: number; y: number; idx0: number; rowTop: number; mode: 'pending' | 'nudge' | 'draw' } | null = null;
@@ -547,6 +550,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
         return;
       }
       if (ti < 0) return;
+      if (sel && sub < 0 && !e.altKey && ti >= sel.t0 && ti <= sel.t1 && si >= sel.s0 && si < sel.s1) {
+        canvas.setPointerCapture(e.pointerId);
+        selMove = { ti, si0: si, base: snapshot(p), region: sel, clip: copy(p, sel), delta: 0, moved: false, bars: sel.t0 === 0 && sel.t1 === TRACKS.length - 1 };
+        return;
+      }
       sel = null;
       pending = snapshot(p);
       const tr = p.tracks[ti];
@@ -582,9 +590,28 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const h0 = hit(e);
       hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
       updateLens();
+      // over the selection: it can be picked up
+      const overSel = !!sel && h0.sub < 0 && h0.ti >= sel.t0 && h0.ti <= sel.t1 && h0.si >= sel.s0 && h0.si < sel.s1;
+      canvas.style.cursor = selMove?.moved ? 'grabbing' : overSel ? 'grab' : '';
       if (selDrag) {
         if (h0.si !== selDrag.s0 || h0.ti !== selDrag.t0) selDrag.moved = true;
         if (selDrag.moved || !selDrag.ruler) updateSel(h0.si, h0.ti);
+        return;
+      }
+      if (selMove) {
+        const m = selMove;
+        let delta = h0.si - m.si0;
+        if (m.bars) delta = Math.round(delta / STEPS_PER_BAR) * STEPS_PER_BAR;
+        delta = clamp(delta, -m.region.s0, SONG_STEPS - m.region.s1);
+        if (delta === m.delta) return;
+        if (!m.moved) pushUndo(m.base); // the whole move is one undo step
+        m.moved = true;
+        m.delta = delta;
+        // from the song as it was: lift the selection out, put it down `delta` steps on
+        restore(p, snapshot({ tracks: m.base } as unknown as Project));
+        clear(p, m.region);
+        sel = paste(p, m.clip, m.region.t0, m.region.s0 + delta);
+        bulkChanged();
         return;
       }
       if (hold) {
@@ -700,6 +727,17 @@ export function mountUI(root: HTMLElement, initial: Project) {
         if (!t.playing) t.phase = startStep;
       }
       selDrag = null;
+      if (selMove && !selMove.moved) {
+        // a click inside the selection: drop it and click the step as usual
+        const { ti, si0 } = selMove;
+        const tr = p.tracks[ti];
+        sel = null;
+        if (!TRACKS[ti].global) {
+          pending = snapshot(p);
+          setStep(ti, si0, (tr.s[si0] ? 0 : 1) as StepState, tr.note[si0]);
+        }
+      }
+      selMove = null;
       if (hold && hold.hi === hold.si0) {
         // ⌥-click: toggle slide (turns the step on if needed)
         const tr = p.tracks[hold.ti];
