@@ -890,6 +890,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const labels: [string, number, boolean][] = [];
     const inset = CELL >= 11 ? 4 : CELL >= 4 ? 1 : 0;
     const gap = gapH(ti, j);
+    if (j % 2 === 0) {
+      // every other row a shade lighter: each row reads as its own band, its dots inside it
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+      ctx.fillRect(0, rowTop + gap, w, height - gap);
+    }
     if (gap) {
       // group divider
       ctx.fillStyle = COLORS.line;
@@ -904,6 +909,13 @@ export function mountUI(root: HTMLElement, initial: Project) {
     let prev = first - 1;
     while (isAtk && prev >= 0 && !tr.s[prev]) prev--;
     let slidInto = isAtk && prev >= 0 && !!tr.slide[prev];
+    // notes: no bars; a dot per note joined by a line, note to note, so a change is a kink you see at a glance
+    const line: [number, number][] = [];
+    const dots: [number, number, string][] = [];
+    const yOf = (n: number) => bottom - n * span;
+    if (!g) {
+      for (let k = first - 1; k >= 0; k--) if (tr.s[k]) { line.push([k * CELL - x0 + CELL / 2, yOf(noteValue(ti, id, k))]); break; }
+    }
     for (let si = first; si <= last; si++) {
       if (!g && !tr.s[si]) continue; // notes only (GLOBAL and lanes: every step)
       let unused = false;
@@ -922,7 +934,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
       // GLOBAL: set here = bright, held from earlier = dim · notes: every value looks the same
       const lit = g ? 0 : glow(ti, si);
       ctx.fillStyle = !g ? (unused ? COLORS.line : lit ? mix(COLORS.bar, '#ffffff', lit) : COLORS.bar) : locked ? COLORS.text : COLORS.line;
-      if (d.bipolar) {
+      if (!g) {
+        // notes: no bar, a dot on the line (drawn after it)
+        line.push([x + CELL / 2, yOf(n)]);
+        dots.push([x + CELL / 2, yOf(n), ctx.fillStyle as string]);
+      } else if (d.bipolar) {
         // grows up/down from the centre line (e.g. Pan: up = right, down = left)
         const mid = rowTop + pad + span / 2;
         const bh = Math.max(2, Math.abs(n - 0.5) * span);
@@ -935,6 +951,23 @@ export function mountUI(root: HTMLElement, initial: Project) {
         // position as a number: 0–8, or −4…+4 around the centre for bipolar values
         const label = valueLabel(id, toIndex(d, n));
         labels.push([label, si, (!g && !unused) || locked]);
+      }
+    }
+    if (line.length) {
+      for (let k = last + 1; k < SONG_STEPS; k++) if (tr.s[k]) { line.push([k * CELL - x0 + CELL / 2, yOf(noteValue(ti, id, k))]); break; }
+      if (line.length > 1) {
+        ctx.strokeStyle = COLORS.dim;
+        ctx.lineWidth = 1.5;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        line.forEach(([lx, ly], i) => (i ? ctx.lineTo(lx, ly) : ctx.moveTo(lx, ly)));
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      }
+      const r = CELL >= 11 ? 2.5 : 1.5;
+      for (const [dx, dy, c] of dots) {
+        ctx.fillStyle = c;
+        ctx.fillRect(dx - r, dy - r, 2 * r, 2 * r);
       }
     }
     // on a small dark tag along the top, over the bars
