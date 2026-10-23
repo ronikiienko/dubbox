@@ -59,10 +59,12 @@ Every voice has **exactly the same** per-note values.
 
 | Value | Meaning everywhere | KICK | HAT | PERC | BASS / CHORD / MELODY |
 |---|---|---|---|---|---|
-| *Pitch* (per step) | drums: ±12 st; synths: ±7 scale steps | sine pitch (base 50 Hz) | noise HP frequency (base 8 kHz) | ring + click frequency (base 1.4 kHz) | scale step from Root in the current Scale. BASS F1, CHORD = chord root (octave doesn't matter), MELODY F3 |
+| *Pitch* (per step) | drums: ±12 st; synths: ±7 scale steps | sine pitch (base = Root, D1…C#2) | noise HP frequency (base 8 kHz) | ring + click frequency (base 1.4 kHz) | scale step from Root in the current Scale. BASS F1, CHORD = chord root (octave doesn't matter), MELODY F3 |
 | **LP** | lowpass on the voice (brightness) | 4-pole ladder after drive | 2× one-pole LP | 4-pole ladder | ladder cutoff (+ envelope) |
 | **Res** | resonance of the voice's filter | ladder res (boom) | HP resonance (ring) | BP Q (ringy ↔ noisy) | ladder res |
-| **HP** | highpass, 12 dB. Position 0 = off (bypassed) | 30 Hz–1 kHz | 3–16 kHz | 200 Hz–8 kHz | bass 30 Hz–2 kHz, chord 60 Hz–4 kHz |
+| **HP** | highpass, 12 dB. Position 0 = off (bypassed) | 60–420 Hz | 7–17.5 kHz | 1.3–10 kHz | bass 60 Hz–1 kHz, chord 130 Hz–1.4 kHz, mel 170 Hz–1.5 kHz |
+
+**Filter tuning** (`LP_HZ`, `HP_HZ` in `params.ts`): every LP and HP position is a measured cutoff per instrument, not a min–max curve, so each of the 9 steps is an even, audible change. Measured by rendering one note per position through the engine (track at −20 dB so the master glue stays out of it): LP by A-weighted level (≈ brightness), HP by K-weighted loudness (counts losing the low end). Result: LP ≈ 2.5–3 dB per step from open down to about −23 dB (kick −15: below that it's only sub), HP ≈ 2.5–3 dB per step to about −24 dB. Between positions (slides, ramps) the cutoff is log-interpolated. Synth LP: the pluck opens the filter 3 octaves at each note, so above ~2 kHz nothing changes; their default (middle) sits where the steep part begins, so the upper half still brightens (~1 dB a step) and the lower half darkens fast. Hat HP and snare HP measure small (hats have little below 8 kHz; the snare HP takes the body off first, which you hear more than you measure). The defaults moved with the tables: CHORD 600 → 230 Hz, MELODY 1.5 kHz → 250 Hz (both were in the dead zone), BASS 220 → 250 Hz.
 | **Decay** | length | ✓ | ✓ | ✓ | ✓ |
 | **Dist** | saturation, loudness-matched | ✓ | ✓ | ✓ | ✓ |
 | Phs · Lvl · **Pan** · Dly · Rev | mixer; Pan defaults to centre, equal-power, sends stay centred (pre-pan) | ✓ | ✓ | ✓ | ✓ |
@@ -168,15 +170,15 @@ Saturation everywhere is `tanh`. Use 2× oversampling only in the synth filter a
 **KICK**
 - Sine oscillator. Pitch env: starts at `tune × 4`, exponential decay to `tune` with τ ≈ 30 ms.
 - Amp env: exponential decay, `Decay` → 0.1–1.2 s.
-- `tanh(x × 1.5)` drive → 4-pole ladder lowpass at `LP` (150 Hz–12 kHz), with `Res`.
-- Base pitch fixed at 50 Hz; per-step pitch ±12 st → ~25–100 Hz.
+- `tanh(x × 1.5)` drive → 4-pole ladder lowpass at `LP` (70 Hz–12 kHz, see Filter tuning), with `Res`.
+- **Base pitch = Root**, in D1…C#2 (37–69 Hz; default F → F1 43.7 Hz), so a long kick tail is in key with the bass. Per-step pitch ±12 st from there. (Until the Root fix it was a fixed 50 Hz, between G and G#.)
 
 **HAT**
-- White noise → 2-pole highpass at 8 kHz × pitch, Q 0.7 + 8 × `Res` → 2× one-pole lowpass at `LP` (2–16 kHz).
+- White noise → 2-pole highpass at 8 kHz × pitch, Q 0.7 + 8 × `Res` → 2× one-pole lowpass at `LP` (1.9–16 kHz).
 - Decay 15–600 ms (low = closed, high = open).
 
 **PERC**
-- Noise → bandpass at 1.4 kHz × pitch, Q 1 + 12 × `Res`, plus a 2 ms sine click at half that → 4-pole ladder lowpass at `LP` (0.5–12 kHz).
+- Noise → bandpass at 1.4 kHz × pitch, Q 1 + 12 × `Res`, plus a 2 ms sine click at half that → 4-pole ladder lowpass at `LP` (0.7–12 kHz).
 - Decay 20–400 ms.
 
 **SYNTH** (BASS = 1 note, CHORD = 4 notes)
@@ -184,14 +186,14 @@ Saturation everywhere is `tanh`. Use 2× oversampling only in the synth filter a
 - **Analog drift (baked in):** each oscillator gets a slow random pitch wander of ±4 cents. CHORD voices are detuned ±6 cents from each other.
 - **Scale** (GLOBAL row): the 7 modes on Root, dark → bright, each step changes one note: Loc, Phr, **Min** (default), Dor, Mix, Maj, Lyd. Together they reach all 12 notes. BASS, CHORD and MELODY pitches are all read in it. Borrowing = set Scale at that chord, set it back after.
 - **Size** (CHORD row, per note): oct, 5th, tri, **7th** (default), 9th. Stacked thirds from the scale, starting on the note's step, so major/minor/diminished fall out of the scale. **5th is always a perfect fifth** (power chord); tri and up follow the scale strictly, so e.g. step 1 in minor is diminished. Always 4 oscillators: oct/5th/tri double tones an octave up; 9th drops the 5th.
-- CHORD **voicing is automatic, around one fixed centre**: every chord tone lands in the window −1…+10 st around F2 (+ Root). So a chord always sounds the same wherever it's pasted, progressions move as few notes as possible, and nothing drifts. Pitch only picks the root step; ±7 gives the same voicing. Step 0 in Min with Size 7th = the old fixed m7 stab. No key compensation on CHORD (it stays in one register). Slide moves each oscillator to its new note.
-- One **4-pole ladder filter** (tanh stages), `Cutoff` 40 Hz–12 kHz (exp), `Res` 0–0.95 (self-oscillation just short of max).
+- CHORD **voicing is automatic, around one fixed centre**: every chord tone lands in the window −1…+10 st around the chord base (Root in F2…E3). So a chord always sounds the same wherever it's pasted, progressions move as few notes as possible, and nothing drifts. Pitch only picks the root step; ±7 gives the same voicing. Step 0 in Min with Size 7th = the old fixed m7 stab. No key compensation on CHORD (it stays in one register). Slide moves each oscillator to its new note.
+- One **4-pole ladder filter** (tanh stages), `Cutoff` per synth from 20–26 Hz up to 2–2.6 kHz (see Filter tuning), `Res` 0–0.95 (self-oscillation just short of max).
 - One envelope (fast 2 ms attack, exp decay `Decay` 30 ms–2 s) drives both amp and filter.
   - Filter env amount is fixed at +3 octaves.
 - Mono retrigger; pitch moves only via slide.
 - Pitch loudness compensation (BASS, MELODY): −2 dB per octave of pitch above root (follows the glide).
 - **Attack** (synths, per note, Note group): fade-in time 2 ms (default, the old snap) · 10 · 30 · 80 · 150 · 300 ms · 0.6 · 1.2 · 2.5 s. A retrigger rises from the current level. The filter envelope rises with it.
-- Root: BASS base note = MIDI 29 + rootIndex (F1 by default), CHORD = +12.
+- Root: each synth's base note is Root in its range starting on F: BASS F1…E2 (MIDI 29–40), CHORD F2…E3, MELODY F3…E4; the KICK's range starts on D (D1…C#2). `rootAbove(root, from)` in `params.ts`. The label is the note you hear. (Before the fix the synths played MIDI 29 + root index, so every Root label was 5 semitones off: "F" sounded B♭. Old songs now play 5 semitones lower or 7 higher accordingly; they weren't migrated.)
 
 ### 5.2 Tape delay (the important one)
 

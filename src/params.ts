@@ -2,7 +2,7 @@
 // Values are stored normalized 0..1; `toReal` maps them through the curve.
 // Every knob is stepped: it only lands on `positions` evenly spaced values.
 
-export type Curve = 'lin' | 'exp' | 'step';
+export type Curve = 'lin' | 'exp' | 'step' | 'table';
 
 export interface ParamDef {
   id: string;
@@ -13,6 +13,7 @@ export interface ParamDef {
   defN: number; // normalized default, derived
   curve: Curve;
   steps?: string[];
+  table?: number[]; // 'table': the real value at each position (log-interpolated between, for glides)
   positions: number; // detents: 9 by default, steps.length for 'step' params
   bipolar?: boolean; // arc drawn from center
   lane?: boolean; // set on any step and held until changed (like GLOBAL), not per note: shapes the tail after notes
@@ -26,6 +27,9 @@ const sec = (v: number) => (v < 1 ? Math.round(v * 1000) + ' ms' : v.toFixed(2) 
 const pct = (v: number) => Math.round(v * 100) + '%';
 
 export const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+/** Root (0 = C … 11 = B) → semitones above the lowest note of a voice's range, which starts on `from`
+ *  (a NOTES index). The synths' ranges start on F, the kick's on D (so it stays around 37–69 Hz). */
+export const rootAbove = (root: number, from: number) => (((Math.round(root) - from) % 12) + 12) % 12;
 
 export function toReal(d: ParamDef, n: number): number {
   switch (d.curve) {
@@ -35,10 +39,19 @@ export function toReal(d: ParamDef, n: number): number {
       return d.min * Math.pow(d.max / d.min, n);
     case 'step':
       return Math.round(n * (d.steps!.length - 1));
+    case 'table':
+      return tableAt(d.table!, n);
   }
 }
 
-export function toNorm(d: Pick<ParamDef, 'curve' | 'min' | 'max' | 'steps'>, v: number): number {
+/** Log-interpolate a table of positive values at normalized position n. */
+function tableAt(t: number[], n: number): number {
+  const x = Math.max(0, Math.min(1, n)) * (t.length - 1);
+  const i = Math.min(t.length - 2, Math.floor(x));
+  return t[i] * Math.pow(t[i + 1] / t[i], x - i);
+}
+
+export function toNorm(d: Pick<ParamDef, 'curve' | 'min' | 'max' | 'steps' | 'table'>, v: number): number {
   switch (d.curve) {
     case 'lin':
       return (v - d.min) / (d.max - d.min);
@@ -46,6 +59,12 @@ export function toNorm(d: Pick<ParamDef, 'curve' | 'min' | 'max' | 'steps'>, v: 
       return Math.log(v / d.min) / Math.log(d.max / d.min);
     case 'step':
       return v / (d.steps!.length - 1);
+    case 'table': {
+      const t = d.table!;
+      let best = 0;
+      for (let i = 1; i < t.length; i++) if (Math.abs(Math.log(t[i] / v)) < Math.abs(Math.log(t[best] / v))) best = i;
+      return best / (t.length - 1);
+    }
   }
 }
 
@@ -228,40 +247,54 @@ const DESCRIPTIONS: Record<string, string> = {
 };
 export const describe = (id: string) => DESCRIPTIONS[id] ?? DESCRIPTIONS[id.slice(id.lastIndexOf('.') + 1)] ?? '';
 
-/** HP range per voice, so every position actually cuts into that instrument (hats live above 8 kHz). */
-const HP_RANGE: Record<string, [number, number]> = {
-  kick: [30, 1000],
-  hat: [3000, 16000],
-  perc: [200, 8000],
-  snare: [100, 6000],
-  bass: [30, 2000],
-  chord: [60, 4000],
-  mel: [80, 6000],
+/**
+ * Filter cutoffs per position (Hz), tuned per instrument by ear-weighted measurement so every step is an
+ * even, audible change (no dead half, no cliff at the end). LP: 0 = darkest … 8 = open; drums default open,
+ * synths default to the middle. HP: position 0 = off (bypassed), 1 = a first audible thinning … 8 = thin.
+ */
+export const LP_HZ: Record<string, number[]> = {
+  kick: [70, 85, 100, 125, 160, 220, 330, 700, 12000], // body lives below 300 Hz; above that only the click
+  hat: [1900, 2300, 2800, 3500, 4500, 5900, 7900, 11400, 16000],
+  perc: [700, 820, 960, 1150, 1400, 1800, 2500, 4000, 12000],
+  snare: [230, 300, 400, 600, 1100, 2200, 4200, 7500, 12000], // down to the body (185/330 Hz)
+  // synths: the pluck opens the filter 3 octaves at each note, so past ~2 kHz nothing changes
+  bass: [20, 37, 70, 120, 250, 360, 540, 950, 2000],
+  chord: [25, 40, 70, 120, 230, 350, 560, 900, 2000],
+  mel: [26, 40, 65, 110, 250, 430, 850, 1500, 2600],
+};
+export const HP_HZ: Record<string, number[]> = {
+  kick: [0, 60, 89, 120, 150, 200, 250, 320, 420],
+  hat: [0, 7000, 8500, 10000, 11500, 13000, 14500, 16000, 17500], // hats live above 8 kHz
+  perc: [0, 1300, 1900, 2600, 3500, 4700, 6300, 8100, 10200],
+  snare: [0, 150, 250, 400, 700, 1200, 2200, 4000, 7000], // first the body goes, then the noise thins
+  bass: [0, 60, 100, 150, 230, 350, 500, 700, 1000],
+  chord: [0, 130, 200, 300, 490, 610, 810, 1100, 1400],
+  mel: [0, 170, 250, 360, 510, 700, 920, 1200, 1500],
 };
 
-/** HP knob position (0..1) → Hz. Position 0 = 0 = off: the filter is bypassed, so the default changes nothing. */
+/** HP knob position (0..1) → Hz. Position 0 = 0 = off: the filter is bypassed, so the default changes nothing.
+ *  Between off and position 1 (a glide) it stays at position 1. */
 export function hpHz(voice: string, n: number): number {
   if (n < 1 / 16) return 0;
-  const [lo, hi] = HP_RANGE[voice];
-  return lo * Math.pow(hi / lo, (n - 0.125) / 0.875);
+  return tableAt(HP_HZ[voice].slice(1), (Math.max(n, 0.125) - 0.125) / 0.875);
 }
 
-/** The shared core every voice has. */
-/** Exp range centred on `mid`: the default sits exactly at the middle position, `ratio` either way. */
-const around = (mid: number, ratio: number): [number, number, number] => [mid / ratio, mid * ratio, mid];
-
-const core = (k: string, lp: [number, number, number], res: number, decay: [number, number, number]) => [
-  p({ id: `${k}.lp`, label: 'Lowpass', min: lp[0], max: lp[1], def: lp[2], curve: 'exp', fmt: hz }),
+/** The shared core every voice has. LP: the voice's table; `lpDef` = its default position. */
+const core = (k: string, lpDef: number, res: number, decay: [number, number, number]) => [
+  p({ id: `${k}.lp`, label: 'Lowpass', min: LP_HZ[k][0], max: LP_HZ[k][8], def: LP_HZ[k][lpDef], curve: 'table', table: LP_HZ[k], fmt: hz }),
   p({ id: `${k}.res`, label: 'Resonance', min: 0, max: 0.95, def: res, curve: 'lin' }),
-  // position 0 = off (bypassed); 1..8 = the voice's HP_RANGE
+  // position 0 = off (bypassed); 1..8 = the voice's HP_HZ
   p({ id: `${k}.hp`, label: 'Highpass', min: 0, max: 1, def: 0, curve: 'lin', fmt: (v) => (hpHz(k, v) ? hz(hpHz(k, v)) : 'off') }),
   p({ id: `${k}.decay`, label: 'Decay', min: decay[0], max: decay[1], def: decay[2], curve: 'exp', fmt: sec }),
 ];
 
+/** Exp range centred on `mid`: the default sits exactly at the middle position, `ratio` either way. */
+const around = (mid: number, ratio: number): [number, number, number] => [mid / ratio, mid * ratio, mid];
+
 // Decay (and synth LP) default to the middle position, so every note can go either way.
-const synthParams = (k: string, lp: number, decay: number) => [
+const synthParams = (k: string, decay: number) => [
   p({ id: `${k}.atk`, label: 'Attack', min: 0, max: 8, def: 0, curve: 'step', steps: ATTACK.map(sec) }),
-  ...core(k, around(lp, 8), 0.25, around(decay, 6)),
+  ...core(k, 4, 0.25, around(decay, 6)),
 ];
 
 export const PARAMS: ParamDef[] = [
@@ -276,16 +309,16 @@ export const PARAMS: ParamDef[] = [
   // drum LP defaults fully open (top); Decay defaults to the middle
   p({ id: 'kick.punch', label: 'Punch', min: 0, max: 1, def: 0.5, curve: 'lin' }),
   p({ id: 'kick.click', label: 'Click', min: 0, max: 1, def: 0, curve: 'lin' }),
-  ...core('kick', [150, 12000, 12000], 0, around(0.45, 4)),
+  ...core('kick', 8, 0, around(0.45, 4)),
   p({ id: 'hat.metal', label: 'Metal', min: 0, max: 1, def: 0, curve: 'lin' }),
-  ...core('hat', [2000, 16000, 16000], 0, around(0.06, 8)),
-  ...core('perc', [500, 12000, 12000], 0.25, around(0.12, 4)),
+  ...core('hat', 8, 0, around(0.06, 8)),
+  ...core('perc', 8, 0.25, around(0.12, 4)),
   p({ id: 'snare.snap', label: 'Snap', min: 0, max: 1, def: 0.5, curve: 'lin' }),
-  ...core('snare', [500, 12000, 12000], 0, around(0.2, 4)),
-  ...synthParams('bass', 220, 0.25),
+  ...core('snare', 8, 0, around(0.2, 4)),
+  ...synthParams('bass', 0.25),
   p({ id: 'chord.size', label: 'Chord size', min: 0, max: 4, def: 3, curve: 'step', steps: SIZES }),
-  ...synthParams('chord', 600, 0.35),
-  ...synthParams('mel', 1500, 0.3),
+  ...synthParams('chord', 0.35),
+  ...synthParams('mel', 0.3),
 
   // mixer
   ...TRACKS.flatMap((_, i) => [

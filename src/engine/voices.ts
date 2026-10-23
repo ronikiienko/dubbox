@@ -1,4 +1,5 @@
 import { Ladder, Noise, OnePole, SVF, Smooth, TAU, decayCoef, lpCoef, mtof, saw, tanh, timeCoef } from './dsp';
+import { rootAbove } from '../params';
 
 export interface Voice {
   trigger(note: number): void;
@@ -18,7 +19,7 @@ export class Kick implements Voice {
   private dec = 0;
   private pDec = 0;
   private depth = 3; // pitch starts at (1 + depth) × the base
-  private tune = 50; // fixed base pitch; per-step pitch moves it
+  private tune = 43.65; // base pitch: Root, D1…C#2; per-step pitch moves it
   private ratio = 1;
   private punch = 0.5;
   private click = 0;
@@ -30,7 +31,8 @@ export class Kick implements Voice {
   constructor(private sr: number) {
     this.cDec = Math.exp(-1 / (0.0015 * sr));
   }
-  set(tone: number, res: number, decay: number, punch: number, click: number) {
+  set(tone: number, res: number, decay: number, punch: number, click: number, root: number) {
+    this.tune = mtof(26 + rootAbove(root, 2)); // D1 = MIDI 26
     this.tone = tone;
     this.res = res;
     this.dec = decayCoef(decay, this.sr);
@@ -302,7 +304,7 @@ export class Synth implements Voice {
     }
     // chords stay in one register, so only mono notes need it
     this.keyGain = this.chord ? 1 : Math.pow(10, (DB_PER_OCTAVE * this.note) / 12 / 20);
-    const midi = this.baseMidi + root;
+    const midi = this.baseMidi + rootAbove(root, 5); // baseMidi is an F
     for (let i = 0; i < this.dt.length; i++) {
       this.drift[i] += (this.driftTarget[i] - this.drift[i]) * 0.02;
       const cents = this.detune[i] + this.drift[i];

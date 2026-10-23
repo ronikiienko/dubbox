@@ -249,7 +249,7 @@ class Engine extends AudioWorkletProcessor {
     this.crushes[t].set(R[mixId(t, 'crs')]);
     this.phasers[t].set(R[mixId(t, 'phs')]);
     switch (t) {
-      case 0: this.kick.set(R['kick.lp'], R['kick.res'], R['kick.decay'], R['kick.punch'], R['kick.click']); break;
+      case 0: this.kick.set(R['kick.lp'], R['kick.res'], R['kick.decay'], R['kick.punch'], R['kick.click'], R.root); break;
       case 1: this.hat.set(R['hat.lp'], R['hat.res'], R['hat.decay'], R['hat.metal']); break;
       case 2: this.perc.set(R['perc.lp'], R['perc.res'], R['perc.decay']); break;
       case 3: this.snare.set(R['snare.lp'], R['snare.res'], R['snare.decay'], R['snare.snap']); break;
