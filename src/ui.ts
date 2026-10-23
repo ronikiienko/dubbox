@@ -1,4 +1,4 @@
-import { GLOBAL, PARAM_BY_ID, RATCHET, TRACKS, rowGroups, mixId, describe, pitchRange, fromIndex, lockIds, toIndex, toReal } from './params';
+import { GLOBAL, PARAM_BY_ID, isLane, RATCHET, TRACKS, rowGroups, mixId, describe, pitchRange, fromIndex, lockIds, toIndex, toReal } from './params';
 import {
   SONG_STEPS, STEPS_PER_BAR,
   type Project, type StepState, NO_LOCK, audible,
@@ -110,7 +110,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let playBtn: HTMLButtonElement, recBtn: HTMLButtonElement, followBtn: HTMLButtonElement, loopBtn: HTMLButtonElement;
   let scroller: HTMLElement, canvas: HTMLCanvasElement;
   let startStep = 0; // where Play starts (set by clicking the ruler)
-  let follow = true; // keep the playhead in view while playing
+  let follow = localStorage.getItem('dubbox.follow') !== '0'; // keep the playhead in view while playing (only you turn it on)
   let CELL = CELL_MAX; // step width now: zoom glides it toward cellTarget
   let cellTarget = CELL_MAX;
   let zoomAt = 0; // px from the timeline's left edge that stays put while zooming…
@@ -168,7 +168,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     tr.slide[si] = slide;
     send({ t: 'step', i: ti, si, s: st, note, slide });
     // a removed note takes its locked values with it
-    if (!st) for (const id of lockIds(ti)) setLock(ti, id, si, NO_LOCK);
+    if (!st) for (const id of lockIds(ti)) if (!isLane(ti, id)) setLock(ti, id, si, NO_LOCK); // lanes aren't the note's
     scheduleSave(p);
   }
 
@@ -270,12 +270,14 @@ export function mountUI(root: HTMLElement, initial: Project) {
     edit(() => {
       for (let ti = region.t0; ti <= region.t1; ti++) {
         const tr = p.tracks[ti];
-        const ids = onlyRow ? lockIds(ti).filter((id) => id === onlyRow) : lockIds(ti);
+        // a note's own values (lanes only when their row is hovered)
+        const ids = onlyRow ? lockIds(ti).filter((id) => id === onlyRow) : lockIds(ti).filter((id) => TRACKS[ti].global || !isLane(ti, id));
         const single = region.s1 - region.s0 === 1;
         for (let si = region.s0; si < region.s1; si++) {
-          if (!tr.s[si]) continue;
           for (const id of ids) {
-            if (TRACKS[ti].global && !single && tr.locks[id][si] === NO_LOCK) continue;
+            const lane = isLane(ti, id);
+            if (!lane && !tr.s[si]) continue;
+            if (lane && !single && tr.locks[id][si] === NO_LOCK) continue;
             const d = PARAM_BY_ID[id];
             const step = Math.floor(Math.random() * 3) - 1;
             tr.locks[id][si] = clamp(toIndex(d, noteValue(ti, id, si)) + step, 0, d.positions - 1);
@@ -310,6 +312,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
   function setFollow(on: boolean) {
     follow = on;
     followBtn.classList.toggle('lit', on);
+  }
+
+  /** The button / F: your choice is remembered; scrolling only switches it off for now. */
+  function toggleFollow() {
+    setFollow(!follow);
+    localStorage.setItem('dubbox.follow', follow ? '1' : '0');
   }
 
   // ---- lane geometry ----------------------------------------------------
@@ -434,6 +442,23 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   function setLock(ti: number, id: string, si: number, v: number) {
     const arr = p.tracks[ti].locks[id];
+    if (!isLane(ti, id)) return putLock(ti, id, si, v);
+    // held rows store only changes: a value equal to the one already in force isn't one…
+    let j = si - 1;
+    while (j >= 0 && arr[j] === NO_LOCK) j--;
+    let held = j >= 0 ? arr[j] : toIndex(PARAM_BY_ID[id], p.params[id]);
+    putLock(ti, id, si, v === held ? NO_LOCK : v);
+    if (arr[si] !== NO_LOCK) held = arr[si];
+    // …and the next change after it may now repeat what's held: then it goes too
+    for (let k = si + 1; k < SONG_STEPS; k++) {
+      if (arr[k] === NO_LOCK) continue;
+      if (arr[k] !== held) break;
+      putLock(ti, id, k, NO_LOCK);
+    }
+  }
+
+  function putLock(ti: number, id: string, si: number, v: number) {
+    const arr = p.tracks[ti].locks[id];
     if (arr[si] === v) return;
     commitPending();
     arr[si] = v;
@@ -447,23 +472,24 @@ export function mountUI(root: HTMLElement, initial: Project) {
     let j = si - 1;
     while (j >= 0 && !tr.s[j]) j--;
     if (j < 0) return;
-    for (const id of lockIds(ti)) setLock(ti, id, si, tr.locks[id][j]);
+    for (const id of lockIds(ti)) if (!isLane(ti, id)) setLock(ti, id, si, tr.locks[id][j]);
   }
 
   /**
    * Normalized value a note plays with for `id`: its lock, else the default.
-   * GLOBAL has no notes: a set value holds until the next set one.
+   * GLOBAL and lanes aren't per note: a set value holds until the next set one.
    */
   const noteValue = (ti: number, id: string, si: number) => {
     const arr = p.tracks[ti].locks[id];
     let j = si;
-    if (TRACKS[ti].global) while (j > 0 && arr[j] === NO_LOCK) j--;
+    if (isLane(ti, id)) while (j > 0 && arr[j] === NO_LOCK) j--;
     const v = j >= 0 ? arr[j] : NO_LOCK;
     return v === NO_LOCK ? p.params[id] : fromIndex(PARAM_BY_ID[id], v);
   };
 
   /** A note's value differs from the default (unset, or set to the default, both count as default). */
   const shaped = (ti: number, id: string, si: number) => {
+    if (isLane(ti, id)) return false; // not the note's
     const v = p.tracks[ti].locks[id][si];
     return v !== NO_LOCK && v !== toIndex(PARAM_BY_ID[id], PARAM_BY_ID[id].defN);
   };
@@ -639,13 +665,13 @@ export function mountUI(root: HTMLElement, initial: Project) {
           if (si !== b.si0) b.mode = 'draw';
           else if (Math.abs(b.y - e.clientY) > 4) b.mode = 'nudge';
         }
-        if (b.mode === 'nudge' && tr.s[b.si0]) {
+        if (b.mode === 'nudge' && (tr.s[b.si0] || isLane(b.ti, b.id))) {
           setLock(b.ti, b.id, b.si0, sliderIdx(e.offsetY));
         } else if (b.mode === 'draw') {
           const idx = sliderIdx(e.offsetY);
           slider!.si = si; // it follows the pen
           const lo = Math.min(b.last, si), hi = Math.max(b.last, si);
-          for (let i = lo; i <= hi; i++) if (tr.s[i]) setLock(b.ti, b.id, i, idx);
+          for (let i = lo; i <= hi; i++) if (tr.s[i] || isLane(b.ti, b.id)) setLock(b.ti, b.id, i, idx);
           b.last = si;
           if (editRow) editRow.si = si; // drawing: the note under the pen (a nudge keeps its own note)
         }
@@ -685,7 +711,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const o = d.orig!;
       const put = (k: number, from: number) => {
         setStep(d.ti, k, o.s[from] as StepState, o.note[from], o.slide[from]);
-        for (const id of lockIds(d.ti)) setLock(d.ti, id, k, o.locks[id][from]);
+        for (const id of lockIds(d.ti)) if (!isLane(d.ti, id)) setLock(d.ti, id, k, o.locks[id][from]); // lane points stay put
       };
       put(d.at, d.at); // the step it was over gets its own note back (or stays empty)
       if (d.at !== d.si0) put(d.si0, d.si0);
@@ -718,8 +744,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
       rampLo = Math.min(r.si0, r.si1);
       rampHi = Math.max(r.si0, r.si1);
       const len = r.si1 - r.si0;
+      const lane = isLane(r.ti, r.id); // lanes: every step on the line gets its point
       for (let i = rampLo; i <= rampHi; i++) {
-        if (!tr.s[i]) continue;
+        if (!tr.s[i] && !lane) continue;
         setLock(r.ti, r.id, i, Math.round(len ? r.idx0 + ((r.idx1 - r.idx0) * (i - r.si0)) / len : r.idx0));
       }
     };
@@ -842,8 +869,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
   /** One value row of a track: a bar per note, in its slot or (magnified) in the lens. */
   function drawRow(ctx: CanvasRenderingContext2D, ti: number, j: number, first: number, last: number, x0: number, w: number) {
     const tr = p.tracks[ti];
-    const g = TRACKS[ti].global;
     const id = lockIds(ti)[j];
+    const g = isLane(ti, id); // GLOBAL and lanes: values on any step, held (drawn as one continuous fill)
     const d = PARAM_BY_ID[id];
     const gm = rowGeom(ti, j);
     const rowTop = gm.top, height = gm.height;
@@ -874,7 +901,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     while (isAtk && prev >= 0 && !tr.s[prev]) prev--;
     let slidInto = isAtk && prev >= 0 && !!tr.slide[prev];
     for (let si = first; si <= last; si++) {
-      if (!tr.s[si]) continue;
+      if (!g && !tr.s[si]) continue; // notes only (GLOBAL and lanes: every step)
       let unused = false;
       if (isAtk) {
         unused = slidInto;
@@ -1136,7 +1163,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
     t.phase = t.enginePhase = startStep;
     t.posAt = performance.now();
     if (on) {
-      setFollow(true);
       startEngine(() => p).then(() => send({ t: 'play', on: t.playing, from: startStep }));
     } else {
       send({ t: 'play', on, from: startStep });
@@ -1274,7 +1300,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       w.postMessage({ project: p, format } satisfies ToExport);
     });
     exportBtn.title = 'render the whole song to a file without playing it (MP3 when the REC format is MP3, else WAV)';
-    followBtn = button('FOLLOW', 'btn small lit', () => setFollow(!follow));
+    followBtn = button('FOLLOW', follow ? 'btn small lit' : 'btn small', () => toggleFollow());
     followBtn.title = 'keep the playhead in view (F)';
     // fullscreen: the app fills the screen, no browser bars (Esc leaves)
     const fullBtn = button('⛶', 'btn small' + (document.fullscreenElement ? ' lit' : ''), () => {
@@ -1419,7 +1445,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       else p.tracks[i].mute = !p.tracks[i].mute;
       flagsChanged(i);
     }
-    if (e.code === 'KeyF') setFollow(!follow);
+    if (e.code === 'KeyF') toggleFollow();
     if (e.code === 'KeyL') toggleLoop();
     if (e.code === 'Minus') zoomBy(1 / 1.6);
     if (e.code === 'Equal') zoomBy(1.6);

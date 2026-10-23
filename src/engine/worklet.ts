@@ -1,7 +1,7 @@
 // The whole engine: clock, sequencer, voices, mixer, FX, master.
 // Runs on the audio thread. Talks to the UI only through `port` (see bridge.ts).
 
-import { ATTACK, GLOBAL, PARAMS, RATCHET, lvlGain, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
+import { ATTACK, DELAY_SIXTEENTHS, GLOBAL, PARAMS, RATCHET, lvlGain, PARAM_BY_ID, SWING, chordIntervals, stepToSemi, TRACKS, fromIndex, hpHz, lockIds, mixId, snap, toReal, type ParamDef } from '../params';
 import { NO_LOCK, audible, type TrackState } from '../state';
 import type { FromEngine, ToEngine } from './bridge';
 import { SVF, Smooth, timeCoef } from './dsp';
@@ -15,7 +15,6 @@ declare class AudioWorkletProcessor {
 }
 
 const N = GLOBAL; // instrument tracks; GLOBAL is the last track and has no voice
-const DELAY_SIXTEENTHS = [1, 2, 3, 4, 6];
 const REC_CHUNK = 8192;
 const SPRING_GAIN = 0.33; // spring tank level vs the room (measured: the tank is ~10 dB hotter)
 
@@ -30,6 +29,9 @@ class Engine extends AudioWorkletProcessor {
 
   // per-note locks: each track plays with the values of its current note
   private lockDefs = TRACKS.map((_, i) => lockIds(i).map((id) => PARAM_BY_ID[id]));
+  // lanes (echo time/feedback): set on any step and held until changed, whatever the notes do
+  private laneDefs = TRACKS.map((_, i) => (TRACKS[i].global ? [] : this.lockDefs[i].filter((d) => d.lane)));
+  private laneV: Record<string, number>[] = TRACKS.map(() => ({}));
   private globalDefs = lockIds(GLOBAL).map((id) => PARAM_BY_ID[id]);
   private gv: Record<string, number> = {}; // GLOBAL values in force now (normalized)
   private curK = new Int32Array(N).fill(-1); // step of the note now sounding, -1 = none yet
@@ -78,7 +80,7 @@ class Engine extends AudioWorkletProcessor {
   private vol: Smooth;
 
   // fx + master
-  private delay = new TapeDelay(this.sr);
+  private delays = TRACKS.slice(0, N).map(() => new TapeDelay(this.sr)); // one tape echo per track
   private reverb = new Reverb(this.sr);
   private spring = new Spring(this.sr);
   private glue = new Glue(this.sr);
@@ -113,6 +115,7 @@ class Engine extends AudioWorkletProcessor {
         this.tracks = m.project.tracks;
         this.total = this.tracks[0].s.length;
         this.resolveGlobal(this.nextK - 1);
+        this.resolveLanes(this.nextK - 1);
         break;
       case 'param':
         this.norm[m.id] = m.v;
@@ -125,6 +128,7 @@ class Engine extends AudioWorkletProcessor {
       case 'lock':
         this.tracks[m.i].locks[m.id][m.si] = m.v;
         if (m.i === GLOBAL) this.resolveGlobal(this.nextK - 1);
+        else if (PARAM_BY_ID[m.id].lane) this.resolveLanes(this.nextK - 1);
         break;
       case 'flags':
         this.tracks[m.i].mute = m.mute;
@@ -147,6 +151,7 @@ class Engine extends AudioWorkletProcessor {
         this.phase = m.from;
         this.nextK = Math.ceil(m.from);
         this.resolveGlobal(this.nextK - 1);
+        this.resolveLanes(this.nextK - 1);
         break;
       case 'loop':
         this.loop0 = m.s0;
@@ -166,8 +171,6 @@ class Engine extends AudioWorkletProcessor {
     this.applyGlobal();
     for (let t = 0; t < N; t++) this.applyTrack(t);
     const R = this.R;
-    const stepSamples = (this.sr * 60) / R.tempo / 4;
-    this.delay.set(DELAY_SIXTEENTHS[R['delay.time']] * stepSamples, R['delay.fbk'], R['delay.tone']);
     this.reverb.set(R['reverb.size']);
     this.spring.set(R['reverb.size']);
     this.tape.set(R['tape.age']);
@@ -184,6 +187,19 @@ class Engine extends AudioWorkletProcessor {
       this.gv[d.id] = j >= 0 ? fromIndex(d, arr[j]) : snap(d, this.norm[d.id]);
     }
     this.applyGlobal();
+  }
+
+  /** Lane values in force at step k on every track: the latest set at or before k, else the default. */
+  private resolveLanes(k: number) {
+    for (let t = 0; t < N; t++) {
+      for (const d of this.laneDefs[t]) {
+        const arr = this.tracks[t]?.locks[d.id];
+        if (!arr) continue;
+        let j = Math.min(k, this.total - 1);
+        while (j >= 0 && arr[j] === NO_LOCK) j--;
+        this.laneV[t][d.id] = j >= 0 ? fromIndex(d, arr[j]) : snap(d, this.norm[d.id]);
+      }
+    }
   }
 
   private applyGlobal() {
@@ -204,6 +220,10 @@ class Engine extends AudioWorkletProcessor {
     const to = this.glideTo[t];
     const frac = glide ? Math.min(1, Math.max(0, (this.phase - k) / (to - k))) : 0;
     for (const d of this.lockDefs[t]) {
+      if (d.lane) {
+        R[d.id] = toReal(d, this.laneV[t][d.id] ?? snap(d, this.norm[d.id]));
+        continue;
+      }
       let n = this.lockValue(t, d, k);
       if (glide) n += (this.lockValue(t, d, to) - n) * frac;
       R[d.id] = toReal(d, n);
@@ -213,6 +233,8 @@ class Engine extends AudioWorkletProcessor {
     this.dlyT[t] = this.throws[t] ? 1 : R[mixId(t, 'dly')];
     this.revT[t] = R[mixId(t, 'rev')];
     this.panT[t] = R[mixId(t, 'pan')];
+    // this track's echo: time and feedback from the note, colour from GLOBAL
+    this.delays[t].set(DELAY_SIXTEENTHS[R[mixId(t, 'dtime')]] * ((this.sr * 60) / R.tempo / 4), R[mixId(t, 'dfbk')], R['delay.tone']);
     const hpId = this.hpIds[t];
     const hp = hpHz(hpId.slice(0, hpId.indexOf('.')), R[hpId]);
     this.hpOn[t] = hp > 0;
@@ -271,6 +293,13 @@ class Engine extends AudioWorkletProcessor {
       changed = true;
     }
     if (changed) this.applyGlobal();
+    // lane values set on this step take over, note or not
+    for (let t = 0; t < N; t++) {
+      for (const d of this.laneDefs[t]) {
+        const v = this.tracks[t].locks[d.id][k];
+        if (v !== NO_LOCK) this.laneV[t][d.id] = fromIndex(d, v);
+      }
+    }
     for (let t = 0; t < N; t++) {
       const tr = this.tracks[t];
       const v = this.voices[t];
@@ -372,13 +401,14 @@ class Engine extends AudioWorkletProcessor {
           this.nextK = start;
           this.ratLeft.fill(0);
           this.resolveGlobal(start - 1);
+          this.resolveLanes(start - 1);
         }
       }
 
       for (let t = 0; t < N; t++) vals[t] = this.voices[t].process();
 
       // per track: highpass → dist → bitcrush → phaser → fader → post-fader sends
-      let dryL = 0, dryR = 0, dIn = 0, rIn = 0;
+      let dryL = 0, dryR = 0, dl = 0, dr = 0, rIn = 0;
       for (let t = 0; t < N; t++) {
         const g = this.lvl[t].next(this.lvlT[t]);
         let x = vals[t];
@@ -391,13 +421,14 @@ class Engine extends AudioWorkletProcessor {
         const th = (this.pan[t].next(this.panT[t]) + 1) * (Math.PI / 4);
         dryL += v * Math.SQRT2 * Math.cos(th);
         dryR += v * Math.SQRT2 * Math.sin(th);
-        // sends are taken before the pan: echo and room stay one centred space
-        dIn += v * this.dly[t].next(this.dlyT[t]);
+        // sends are taken before the pan: echoes and room stay centred
+        const echo = this.delays[t];
+        echo.process(v * this.dly[t].next(this.dlyT[t]));
+        dl += echo.l;
+        dr += echo.r;
         rIn += v * this.rev[t].next(this.revT[t]);
       }
 
-      this.delay.process(dIn);
-      const dl = this.delay.l, dr = this.delay.r;
       const rvIn = rIn + 0.125 * (dl + dr);
       this.reverb.process(rvIn);
       this.spring.process(rvIn);

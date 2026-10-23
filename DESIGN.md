@@ -74,7 +74,7 @@ Copying notes between tracks carries every value by its knob position.
 
 | Module | Knobs | Notes |
 |---|---|---|
-| DELAY | **Time** (stepped), **Fbk**, **Tone** | tape echo, the main instrument |
+| DELAY | per track, lanes (any step, held): **Time** (stepped), **Fbk**; per-note send; GLOBAL **Tone** | tape echo, the main instrument |
 | REVERB | **Size** | dark FDN, size and darkness linked |
 | TAPE | **Age** | master: saturation + wow/flutter + hiss + HF loss |
 
@@ -108,7 +108,7 @@ There are **no knobs**. Everything is per note, and the song-wide values are row
 ### 3.1 Per-note values (locks)
 - A track's sound is set **only per note**: its instrument values plus Lvl, Dly, Rev, Phs. There are no knobs at all: song-wide values live on the GLOBAL lane (3.5).
 - **Click a track name** to expand it (one at a time). Under its lane, one row per value shows a **bar per note**, height = its value. There's no "set vs default" look: every note simply has a value, all bars are one tone. (GLOBAL keeps bright = set here, dim = held from earlier.)
-- Rows come in **groups**, each with its name running vertically down the left and a thin divider (5 px gap) above: **Note** (Ratchet, the voice's own values, Decay) · **Filter** (Lowpass, Resonance, Highpass) · **Color** (Distortion, Bitcrush, Phaser) · **Mix** (Level, Pan) · **Sends** (Delay, Reverb). GLOBAL: **Song** (Scale, Root, Tempo, Swing) · **Delay** · **Reverb** · **Master** (Tape age, Volume). Defined in `rowGroups` (`params.ts`).
+- Rows come in **groups**, each with its name running vertically down the left and a thin divider (5 px gap) above: **Note** (Ratchet, the voice's own values, Decay) · **Filter** (Lowpass, Resonance, Highpass) · **Color** (Distortion, Bitcrush, Phaser) · **Mix** (Level, Pan) · **Sends** (Delay, Dly time, Dly fbk, Reverb; Dly time/fbk are lanes, see 5.2). GLOBAL: **Song** (Scale, Root, Tempo, Swing) · **Delay** (Tone) · **Reverb** · **Master** (Tape age, Volume). Defined in `rowGroups` (`params.ts`).
 - Rows are **22 px and all work happens right there**: no magnifier, nothing to hold; the precision comes from the slider below. **Pressing in a row pops a tall slider out of that note** (only that one; nothing moves): a rail up to 180 px (12 px per position, a tick each), the value as a bar, its number on a tag on top, floating over the rows with a shadow and kept inside the visible panel. It opens with the note's value right at the mouse, so nothing jumps. Drag up/down = that note's value. Drag sideways = draw: the slider follows the pen and each note gets the pen's height on it. Hold ⇧ during the drag = ramp: it rides the ramp's moving end. Let go = gone. When not dragging, the note under the mouse shows its value on a small dark tag at the top of its row: the position 0–8, −4…+4 for Pan, or the step's name ("80 ms", "9th"). Nothing else shows numbers. Each row's name shows its description on hover, and the row under the mouse lights its name.
 - Drag a bar up/down = set that note's value. Drag across a row = draw values over every note you pass (bar height follows the mouse). Double-click a bar = back to the default.
 - **Ramp: press in a row, set the start value on the slider, then hold ⇧ and move**: a straight line from the pressed note, at the value you set, to the mouse (dashed guide while dragging), the slider riding its end for the end value; every note under it gets its point on the line, snapped to the positions. Moving back un-does the notes you leave. One undo step.
@@ -123,6 +123,7 @@ There are **no knobs**. Everything is per note, and the song-wide values are row
 - **⌘C / ⌘X** copy / cut. **⌘V** pastes with its top-left at the step under the mouse; hold ⌘ to see a dashed outline of where it lands. Bar selections from the ruler always paste onto the same tracks. **Delete** clears the selection.
 - **⌘D** duplicates the selection right after itself and moves the selection onto the copy, so repeated ⌘D keeps extending (4 → 8 → 12 bars…).
 - Paste **overwrites** the target area (empty steps included). Notes carry pitch, slide and per-note values. Across tracks every value carries over by knob position (slide only between synth tracks).
+- **Box vs section.** A box of notes (⇧-drag, or a single note) copies only the notes and their per-note values; held rows (GLOBAL, echo Time/Fbk lanes) are left untouched on copy, cut, paste and move. A **section** (ruler selection: whole bars, every track) carries held rows too, without disturbing the song around it: the pasted part starts with the values in force where it was copied from, and right after it the values that were in force there before carry on. Clearing a section keeps the value in force after it the same. Redundant points are dropped (only changes are stored).
 - **D = dice**: every value of the selected notes (or the note under the mouse) moves by a random −1 / 0 / +1 position. With the mouse over a bar row, only that row is diced. Press again to keep wandering; each press is one undo step.
 - **⌘Z / ⇧⌘Z** undo / redo (100 steps) for all note edits: clicks, paints, drags, bar edits, region edits. GLOBAL values are in it too. Mutes/solo are not.
 
@@ -133,7 +134,7 @@ Values with a neutral "normal" default sit at the **middle position** (4 of 0–
 GLOBAL **Spring** (0 = default) crossfades the shared reverb from the room (FDN) to a **spring tank** with an equal-power curve: per side a feedback delay (37 / 43 ms) whose loop runs through 16 first-order allpasses (a = 0.6) for the dispersive "boing" chirp, LP 4.2 kHz, HP 120 Hz, a soft clip for splash when hit hard, slight modulation. Reverb Size sets the spring's feedback too. Level-matched to the room (tank × 0.33).
 
 ### 3.5 GLOBAL lane
-The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swing, Vol, Delay Time / Fbk / Tone, Reverb Size, Spring, Tape Age**.
+The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swing, Vol, Delay Tone, Reverb Size, Spring, Tape Age**. (Delay Time and Fbk are per note, per track.)
 - **No notes to place.** Every step has a value. Expand GLOBAL (click its name) and draw in its rows like any value row: a value set on a step **holds until the next set value**; before the first one, the default. Held stretches are drawn dim, set steps bright (with their value when the row is hot).
 - Double-click a set step = remove it (the previous value holds through). Dice only touches set values (or the hovered step).
 - The GLOBAL lane draws **no note cells**: a thin line with an amber marker wherever a value is set, labelled with what changed (scale name, tempo in bpm, otherwise the value's name). Its open rows draw held values as one continuous fill, not per-step bars.
@@ -142,7 +143,7 @@ The last lane, **GLOBAL**, holds the song-wide values: **Scale, Root, Tempo, Swi
 - Old saves: global knob settings that differ from the default become GLOBAL values on step 0; v3 CHORD Scale values move to GLOBAL.
 
 ### 3.4 Stepped knobs
-Every knob snaps to fixed positions: **9** by default (0, ⅛ … 1; bipolar knobs have a centre). Exceptions: Root 12 notes, Delay Time 5, Swing 50/54/58/62/66/75 %, Tempo whole bpm. Locks are stored as position indices.
+Every knob snaps to fixed positions: **9** by default (0, ⅛ … 1; bipolar knobs have a centre). Exceptions: Root 12 notes, Dly time 5, Swing 50/54/58/62/66/75 %, Tempo whole bpm. Locks are stored as position indices.
 
 Song structure = what you place on the timeline, plus mutes and knob moves performed live.
 
@@ -193,6 +194,9 @@ Saturation everywhere is `tanh`. Use 2× oversampling only in the synth filter a
 - Root: BASS base note = MIDI 29 + rootIndex (F1 by default), CHORD = +12.
 
 ### 5.2 Tape delay (the important one)
+
+**One tape echo per instrument track.** Its **Time** and **Fbk** are rows in the track's Sends group (next to the per-note send), but they are **lanes**, not per-note values: set on **any step**, note or not, and held until the next change, like GLOBAL rows (drawn as one continuous fill; set = bright, held = dim). Held rows (GLOBAL and lanes) store **only changes**: setting the value already in force stores nothing (it stays dim), and a later change that now repeats the held value is dropped too. Loading cleans up older files the same way. The echo rings after its note, so its time and feedback must be changeable between notes: hit a snare, then bend its tail with a Time change on an empty step, or swell Fbk across bars while nothing plays. Adding, removing or moving notes leaves lane points where they are, and so do note selections (⇧-drag box: copy, cut, move): lanes belong to the timeline, not to notes. Whole-bar sections (ruler) carry them; see 3.2. **Tone** is one GLOBAL colour for all echoes. Changing Time bends that track's echoes (the slew below). Files before v6 had GLOBAL Time/Fbk: its changes are copied to every track's lanes at the same steps, so old songs sound the same. Seven echoes cost about 8% of a core.
+
 ```
 in ──► [+]──► delayline(time, wow) ──► out
         ▲                    │
@@ -206,7 +210,7 @@ in ──► [+]──► delayline(time, wow) ──► out
   - left: LP 6 kHz → 800 Hz, HP fixed 120 Hz (dark, warm)
   - right: HP 120 Hz → 1.5 kHz, LP fixed 6 kHz (thin, telephone)
 - Stereo: output L = tap, R = same tap at `time + 11 ms`.
-- 25% of the delay output is also fed into the reverb (fixed).
+- 12.5% of the (summed) delay output is also fed into the reverb (fixed).
 
 ### 5.3 Reverb
 - 8-line FDN with a Householder matrix, prime-ish delay lengths (~30–110 ms), slow modulation on 2 lines.
@@ -328,7 +332,7 @@ worklet → main:
 - The timeline is one canvas, virtualized (only visible steps are drawn).
 - ■ on, bar lines + numbers on the ruler, playhead = vertical line.
 - **Ruler click** = set the start marker (bar-quantized). Play starts there, and Stop returns there.
-- **FOLLOW** (key `F`): while playing, the view scrolls smoothly with the playhead at 25% from the left. Any manual scroll turns it off.
+- **FOLLOW** (key `F`): while playing, the view scrolls smoothly with the playhead at 25% from the left. Any manual scroll turns it off, and only you turn it back on (button or `F`): Play never does. The choice is remembered.
 - **Scrolling:** a **trackpad** scrolls both ways like a native view: up/down scrolls the tracks panel, sideways scrolls the song. Both at once, freely (no axis lock). A **mouse wheel** scrolls the song sideways, and over an active note it changes the pitch. That pitch shortcut is off on a trackpad, where vertical drag does it. The first sideways scroll without ⇧ marks the device as a trackpad (remembered in localStorage), since browsers don't report the device.
 - **Zoom** (horizontal only, smooth): ⌘/Ctrl-wheel or trackpad pinch zooms around the mouse; `−` / `=` around the mouse too (or the middle). While FOLLOW is on and playing, zoom pivots on the playhead instead and follow stays on. The step width glides continuously (eased, ~50 ms, even in log space) between 22 px and 1 px (fully out, the whole 300-bar song is 4800 px); a wheel notch or key press ≈ ×1.6, pinch follows the fingers. Cell edges snap to whole pixels so it stays crisp. Zoomed out, cells touch and the small print hides (note numbers and value labels below 16 px; slide, ratchet and value dots below 11 px; GLOBAL labels below 6 px), and the ruler numbers every 2, 4, 8… bars. Editing works the same at any zoom.
 - Knobs: vertical drag (Shift = fine), value tooltip while dragging, double-click = reset.
