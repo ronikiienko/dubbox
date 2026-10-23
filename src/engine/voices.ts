@@ -323,6 +323,8 @@ export class Synth implements Voice {
   }
 
   trigger(note: number, iv?: ArrayLike<number>) {
+    // from silence nothing can click: the filter starts right at this note's cutoff, no glide from the last one
+    if (this.env < 1e-4) this.cutSm.v = this.cutoff;
     this.voice(note, iv);
     this.cur.set(this.tgt);
     this.note = note;

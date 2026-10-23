@@ -35,6 +35,7 @@ class Engine extends AudioWorkletProcessor {
   private curK = new Int32Array(N).fill(-1); // step of the note now sounding, -1 = none yet
   private glideOn = new Array<boolean>(N).fill(false); // slid note: holds, and its values glide into the next note…
   private glideTo = new Int32Array(N); // …which is on this step
+  private fresh = new Array<boolean>(N).fill(false); // no note yet since Play: the first one sets the mixer outright
 
   // transport
   private playing = false;
@@ -141,6 +142,7 @@ class Engine extends AudioWorkletProcessor {
         }
         this.curK.fill(-1);
         this.glideOn.fill(false);
+        this.fresh.fill(true);
         this.ratLeft.fill(0);
         this.phase = m.from;
         this.nextK = Math.ceil(m.from);
@@ -281,6 +283,14 @@ class Engine extends AudioWorkletProcessor {
         this.glideTo[t] = tr.slide[k] ? this.nextNote(t, k) : -1;
         this.glideOn[t] = this.glideTo[t] > k;
         this.applyTrack(t);
+        if (this.fresh[t]) {
+          // the last playback's level, pan and sends don't fade into this one
+          this.fresh[t] = false;
+          this.lvl[t].v = this.lvlT[t];
+          this.dly[t].v = this.dlyT[t];
+          this.rev[t].v = this.revT[t];
+          this.pan[t].v = this.panT[t];
+        }
       }
       if (!audible(this.tracks, t)) {
         if (v instanceof Synth) {
