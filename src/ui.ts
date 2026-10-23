@@ -932,9 +932,11 @@ export function mountUI(root: HTMLElement, initial: Project) {
     let prev = first - 1;
     while (isAtk && prev >= 0 && !tr.s[prev]) prev--;
     let slidInto = isAtk && prev >= 0 && !!tr.slide[prev];
-    // notes: a bar whose value differs from the previous note's (the first note: from the default) is amber
+    // amber = the difference itself: the span between the previous value (the note before; held rows: the
+    // value in force before this step; the first note: the default) and this one
     let lastIdx = toIndex(d, d.defN);
     if (!g) for (let k = first - 1; k >= 0; k--) if (tr.s[k]) { lastIdx = toIndex(d, noteValue(ti, id, k)); break; }
+    if (g && first > 0) lastIdx = toIndex(d, noteValue(ti, id, first - 1));
     for (let si = first; si <= last; si++) {
       if (!g && !tr.s[si]) continue; // notes only (GLOBAL and lanes: every step)
       let unused = false;
@@ -948,29 +950,37 @@ export function mountUI(root: HTMLElement, initial: Project) {
       }
       const locked = arr[si] !== NO_LOCK;
       if (g && locked) held = fromIndex(d, arr[si]);
+      const prevN = fromIndex(d, lastIdx);
       const n = g ? held : noteValue(ti, id, si);
       const x = si * CELL - x0;
       // GLOBAL: set here = bright, held from earlier = dim · notes: every value looks the same
       const lit = g ? 0 : glow(ti, si);
-      ctx.fillStyle = !g ? (unused ? COLORS.line : lit ? mix(COLORS.bar, '#ffffff', lit) : COLORS.bar) : locked ? COLORS.text : COLORS.line;
-      if (!g) {
-        // a different value from the previous note's: the whole bar amber
-        const idx = toIndex(d, n);
-        if (idx !== lastIdx && !unused) ctx.fillStyle = lit ? mix(COLORS.accent, '#ffffff', lit) : COLORS.accent;
-        lastIdx = idx;
-      }
+      // GLOBAL / lanes: set here = bright, held = dim
+      ctx.fillStyle = !g ? (unused ? COLORS.line : lit ? mix(COLORS.bar, '#ffffff', lit) : COLORS.bar) : locked ? COLORS.dim : COLORS.line;
+      const idx = toIndex(d, n);
+      const changed = idx !== lastIdx && !unused;
+      lastIdx = idx;
+      const bx = g ? x : x + inset, bw = g ? CELL : CELL - 2 * inset;
+      // where a value's bar ends (top, or the outer end for bipolar)
+      const mid = rowTop + pad + span / 2;
+      const endY = (v: number) => (d.bipolar ? mid - (v - 0.5) * span : bottom - Math.max(2, v * span));
       if (d.bipolar) {
         // grows up/down from the centre line (e.g. Pan: up = right, down = left)
-        const mid = rowTop + pad + span / 2;
         const bh = Math.max(2, Math.abs(n - 0.5) * span);
-        ctx.fillRect(g ? x : x + inset, n >= 0.5 ? mid - bh : mid, g ? CELL : CELL - 2 * inset, bh);
+        ctx.fillRect(bx, n >= 0.5 ? mid - bh : mid, bw, bh);
       } else {
         const bh = Math.max(2, n * span);
         if (unused && CELL - 2 * inset >= 4) {
           // locked by the slide: an empty outline, the value kept for when the slide goes
           ctx.strokeStyle = COLORS.dim;
           ctx.strokeRect(x + inset + 0.5, bottom - bh + 0.5, CELL - 2 * inset - 1, bh - 1);
-        } else ctx.fillRect(g ? x : x + inset, bottom - bh, g ? CELL : CELL - 2 * inset, bh); // GLOBAL: one continuous fill
+        } else ctx.fillRect(bx, bottom - bh, bw, bh); // GLOBAL: one continuous fill
+      }
+      if (changed) {
+        // the difference: from the previous value's end to this one's (a drop: the amber block above the bar)
+        const ya = endY(prevN), yb = endY(n);
+        ctx.fillStyle = lit ? mix(COLORS.accent, '#ffffff', lit) : COLORS.accent;
+        ctx.fillRect(bx, Math.min(ya, yb), bw, Math.max(2, Math.abs(ya - yb)));
       }
       if (showValues && si === shownAt) {
         // position as a number: 0–8, or −4…+4 around the centre for bipolar values
