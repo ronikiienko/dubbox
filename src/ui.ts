@@ -48,7 +48,8 @@ const HELP: [string, string][] = [
   ['D', 'dice selection / hovered'],
   ['⌘Z / ⇧⌘Z', 'undo / redo'],
   ['⌘O', 'projects'],
-  ['wheel', 'scroll'],
+  ['trackpad swipe', 'scroll (up/down = tracks, sideways = song)'],
+  ['mouse wheel', 'scroll the song · over a note = pitch'],
   ['⌘-wheel / pinch · − =', 'zoom out / in'],
 ];
 
@@ -114,6 +115,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let cellTarget = CELL_MAX;
   let zoomAt = 0; // px from the timeline's left edge that stays put while zooming…
   let zoomStep = 0; // …and the song position (in steps) pinned there
+  let twoAxis = localStorage.getItem('dubbox.twoAxis') === '1'; // a trackpad was seen: wheel events scroll both ways
   let mouseX: number | null = null; // pointer over the timeline (px from its left edge)
   let loop: { s0: number; s1: number } | null = null; // playback repeats steps s0..s1 (exclusive)
   let expanded = -1; // track showing its per-note bar rows
@@ -771,21 +773,34 @@ export function mountUI(root: HTMLElement, initial: Project) {
         zoomBy(Math.exp(-clamp(e.deltaY, -50, 50) * 0.01), e.clientX - scroller.getBoundingClientRect().left);
         return;
       }
+      // A trackpad scrolls in two directions: up/down = the panel, sideways = the song. Its first
+      // sideways scroll without ⇧ gives it away (remembered). A plain mouse wheel scrolls the song.
+      if (e.deltaX !== 0 && !e.shiftKey && !twoAxis) {
+        twoAxis = true;
+        localStorage.setItem('dubbox.twoAxis', '1');
+      }
+      e.preventDefault();
+      if (twoAxis) {
+        // both directions at once, like a native view
+        if (e.deltaX !== 0) {
+          setFollow(false);
+          scroller.scrollLeft += e.deltaX;
+        }
+        tracksEl.scrollTop += e.deltaY;
+        return;
+      }
       const vertical = Math.abs(e.deltaY) > Math.abs(e.deltaX) && !e.shiftKey;
       if (vertical && e.target === canvas) {
+        // mouse wheel over a note = its pitch
         const { si, ti, sub } = hit(e);
         const tr = ti >= 0 ? p.tracks[ti] : null;
         if (tr && sub < 0 && tr.s[si] && !TRACKS[ti].global) {
-          e.preventDefault();
           setStep(ti, si, tr.s[si] as StepState, clamp(tr.note[si] + (e.deltaY < 0 ? 1 : -1), -pitchRange(ti), pitchRange(ti)));
           return;
         }
       }
       setFollow(false);
-      if (vertical) {
-        e.preventDefault();
-        scroller.scrollLeft += e.deltaY;
-      }
+      scroller.scrollLeft += vertical ? e.deltaY : e.deltaX;
     }, { passive: false });
 
     return scroller;
