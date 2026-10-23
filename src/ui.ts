@@ -280,7 +280,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
         for (let si = region.s0; si < region.s1; si++) {
           for (const id of ids) {
             const lane = isLane(ti, id);
-            if (!lane && !tr.s[si]) continue;
+            if (!lane && (!tr.s[si] || ignored(ti, id, si))) continue;
             if (lane && !single && tr.locks[id][si] === NO_LOCK) continue;
             const d = PARAM_BY_ID[id];
             const step = Math.floor(Math.random() * 3) - 1;
@@ -491,6 +491,24 @@ export function mountUI(root: HTMLElement, initial: Project) {
     return v === NO_LOCK ? p.params[id] : fromIndex(PARAM_BY_ID[id], v);
   };
 
+  /** A value the slide makes do nothing, so it's locked (gray, not editable, kept for when the slide goes):
+   *  Decay of a note that slides on into a later note, Attack of a note slid into. */
+  const ignored = (ti: number, id: string, si: number) => {
+    const tr = p.tracks[ti];
+    if (!TRACKS[ti].slide || !tr.s[si]) return false;
+    if (id.endsWith('.atk')) {
+      let k = si - 1;
+      while (k >= 0 && !tr.s[k]) k--;
+      return k >= 0 && !!tr.slide[k];
+    }
+    if (id.endsWith('.decay') && tr.slide[si]) {
+      let e = si + 1;
+      while (e < SONG_STEPS && !tr.s[e]) e++;
+      return e < SONG_STEPS;
+    }
+    return false;
+  };
+
   /** A note's value differs from the default (unset, or set to the default, both count as default). */
   const shaped = (ti: number, id: string, si: number) => {
     if (isLane(ti, id)) return false; // not the note's
@@ -590,6 +608,10 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const tr = p.tracks[ti];
       if (sub >= 0) {
         const id = subRows(ti)[sub];
+        if (ignored(ti, id, si)) {
+          pending = null; // locked by the slide
+          return;
+        }
         canvas.setPointerCapture(e.pointerId);
         bars = { ti, sub, id, si0: si, last: si, y: e.clientY, idx0: toIndex(PARAM_BY_ID[id], noteValue(ti, id, si)), rowTop, mode: 'pending' };
         editRow = { ti, id, si };
@@ -617,7 +639,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
       if (!slider) hover = h0.ti >= 0 ? { ti: h0.ti, si: h0.si, sub: h0.sub } : null;
       // over the selection: it can be picked up
       const overSel = !!sel && h0.sub < 0 && h0.ti >= sel.t0 && h0.ti <= sel.t1 && h0.si >= sel.s0 && h0.si < sel.s1;
-      canvas.style.cursor = selMove?.moved ? 'grabbing' : overSel ? 'grab' : '';
+      const locked = !slider && h0.ti >= 0 && h0.sub >= 0 && ignored(h0.ti, subRows(h0.ti)[h0.sub], h0.si);
+      canvas.style.cursor = selMove?.moved ? 'grabbing' : overSel ? 'grab' : locked ? 'not-allowed' : '';
       if (selDrag) {
         if (h0.si !== selDrag.s0 || h0.ti !== selDrag.t0) selDrag.moved = true;
         if (selDrag.moved || !selDrag.ruler) updateSel(h0.si, h0.ti);
@@ -675,7 +698,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
           const idx = sliderIdx(e.offsetY);
           slider!.si = si; // it follows the pen
           const lo = Math.min(b.last, si), hi = Math.max(b.last, si);
-          for (let i = lo; i <= hi; i++) if (tr.s[i] || isLane(b.ti, b.id)) setLock(b.ti, b.id, i, idx);
+          for (let i = lo; i <= hi; i++) if ((tr.s[i] && !ignored(b.ti, b.id, i)) || isLane(b.ti, b.id)) setLock(b.ti, b.id, i, idx);
           b.last = si;
           if (editRow) editRow.si = si; // drawing: the note under the pen (a nudge keeps its own note)
         }
@@ -750,7 +773,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const len = r.si1 - r.si0;
       const lane = isLane(r.ti, r.id); // lanes: every step on the line gets its point
       for (let i = rampLo; i <= rampHi; i++) {
-        if (!tr.s[i] && !lane) continue;
+        if ((!tr.s[i] || ignored(r.ti, r.id, i)) && !lane) continue;
         setLock(r.ti, r.id, i, Math.round(len ? r.idx0 + ((r.idx1 - r.idx0) * (i - r.si0)) / len : r.idx0));
       }
     };
@@ -814,7 +837,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     // double-click a bar = back to the default value
     canvas.addEventListener('dblclick', (e) => {
       const { si, ti, sub } = hit(e);
-      if (ti >= 0 && sub >= 0) {
+      if (ti >= 0 && sub >= 0 && !ignored(ti, subRows(ti)[sub], si)) {
         pending = snapshot(p);
         setLock(ti, subRows(ti)[sub], si, NO_LOCK);
         pending = null;
@@ -891,7 +914,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const inset = CELL >= 11 ? 4 : CELL >= 4 ? 1 : 0;
     const gap = gapH(ti, j);
     if (j % 2 === 0) {
-      // every other row a shade lighter: each row reads as its own band, its dots inside it
+      // every other row a shade lighter: each row reads as its own band, its bars inside it
       ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
       ctx.fillRect(0, rowTop + gap, w, height - gap);
     }
@@ -909,13 +932,6 @@ export function mountUI(root: HTMLElement, initial: Project) {
     let prev = first - 1;
     while (isAtk && prev >= 0 && !tr.s[prev]) prev--;
     let slidInto = isAtk && prev >= 0 && !!tr.slide[prev];
-    // notes: no bars; a dot per note joined by a line, note to note, so a change is a kink you see at a glance
-    const line: [number, number][] = [];
-    const dots: [number, number, string][] = [];
-    const yOf = (n: number) => bottom - n * span;
-    if (!g) {
-      for (let k = first - 1; k >= 0; k--) if (tr.s[k]) { line.push([k * CELL - x0 + CELL / 2, yOf(noteValue(ti, id, k))]); break; }
-    }
     for (let si = first; si <= last; si++) {
       if (!g && !tr.s[si]) continue; // notes only (GLOBAL and lanes: every step)
       let unused = false;
@@ -934,40 +950,23 @@ export function mountUI(root: HTMLElement, initial: Project) {
       // GLOBAL: set here = bright, held from earlier = dim · notes: every value looks the same
       const lit = g ? 0 : glow(ti, si);
       ctx.fillStyle = !g ? (unused ? COLORS.line : lit ? mix(COLORS.bar, '#ffffff', lit) : COLORS.bar) : locked ? COLORS.text : COLORS.line;
-      if (!g) {
-        // notes: no bar, a dot on the line (drawn after it)
-        line.push([x + CELL / 2, yOf(n)]);
-        dots.push([x + CELL / 2, yOf(n), ctx.fillStyle as string]);
-      } else if (d.bipolar) {
+      if (d.bipolar) {
         // grows up/down from the centre line (e.g. Pan: up = right, down = left)
         const mid = rowTop + pad + span / 2;
         const bh = Math.max(2, Math.abs(n - 0.5) * span);
         ctx.fillRect(g ? x : x + inset, n >= 0.5 ? mid - bh : mid, g ? CELL : CELL - 2 * inset, bh);
       } else {
         const bh = Math.max(2, n * span);
-        ctx.fillRect(g ? x : x + inset, bottom - bh, g ? CELL : CELL - 2 * inset, bh); // GLOBAL: one continuous fill
+        if (unused && CELL - 2 * inset >= 4) {
+          // locked by the slide: an empty outline, the value kept for when the slide goes
+          ctx.strokeStyle = COLORS.dim;
+          ctx.strokeRect(x + inset + 0.5, bottom - bh + 0.5, CELL - 2 * inset - 1, bh - 1);
+        } else ctx.fillRect(g ? x : x + inset, bottom - bh, g ? CELL : CELL - 2 * inset, bh); // GLOBAL: one continuous fill
       }
       if (showValues && si === shownAt) {
         // position as a number: 0–8, or −4…+4 around the centre for bipolar values
-        const label = valueLabel(id, toIndex(d, n));
+        const label = unused ? (isAtk ? 'locked: slid into' : 'locked: slides on') : valueLabel(id, toIndex(d, n));
         labels.push([label, si, (!g && !unused) || locked]);
-      }
-    }
-    if (line.length) {
-      for (let k = last + 1; k < SONG_STEPS; k++) if (tr.s[k]) { line.push([k * CELL - x0 + CELL / 2, yOf(noteValue(ti, id, k))]); break; }
-      if (line.length > 1) {
-        ctx.strokeStyle = COLORS.dim;
-        ctx.lineWidth = 1.5;
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        line.forEach(([lx, ly], i) => (i ? ctx.lineTo(lx, ly) : ctx.moveTo(lx, ly)));
-        ctx.stroke();
-        ctx.lineWidth = 1;
-      }
-      const r = CELL >= 11 ? 2.5 : 1.5;
-      for (const [dx, dy, c] of dots) {
-        ctx.fillStyle = c;
-        ctx.fillRect(dx - r, dy - r, 2 * r, 2 * r);
       }
     }
     // on a small dark tag along the top, over the bars
