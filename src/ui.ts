@@ -932,6 +932,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
     let prev = first - 1;
     while (isAtk && prev >= 0 && !tr.s[prev]) prev--;
     let slidInto = isAtk && prev >= 0 && !!tr.slide[prev];
+    // notes: a bar whose value differs from the previous note's (the first note: from the default) is amber
+    let lastIdx = toIndex(d, d.defN);
+    if (!g) for (let k = first - 1; k >= 0; k--) if (tr.s[k]) { lastIdx = toIndex(d, noteValue(ti, id, k)); break; }
     for (let si = first; si <= last; si++) {
       if (!g && !tr.s[si]) continue; // notes only (GLOBAL and lanes: every step)
       let unused = false;
@@ -950,6 +953,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
       // GLOBAL: set here = bright, held from earlier = dim · notes: every value looks the same
       const lit = g ? 0 : glow(ti, si);
       ctx.fillStyle = !g ? (unused ? COLORS.line : lit ? mix(COLORS.bar, '#ffffff', lit) : COLORS.bar) : locked ? COLORS.text : COLORS.line;
+      if (!g) {
+        // a different value from the previous note's: the whole bar amber
+        const idx = toIndex(d, n);
+        if (idx !== lastIdx && !unused) ctx.fillStyle = lit ? mix(COLORS.accent, '#ffffff', lit) : COLORS.accent;
+        lastIdx = idx;
+      }
       if (d.bipolar) {
         // grows up/down from the centre line (e.g. Pan: up = right, down = left)
         const mid = rowTop + pad + span / 2;
