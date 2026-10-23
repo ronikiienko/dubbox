@@ -53,16 +53,43 @@ const HELP: [string, string][] = [
   ['⌘-wheel / pinch · − =', 'zoom out / in'],
 ];
 
+/** On phones and tablets the same gestures, done with fingers: the touch bar stands in for ⇧ ⌥ and the shortcuts. */
+const TOUCH_HELP: [string, string][] = [
+  ['tap step', 'on / off'],
+  ['drag a note sideways', 'move it (all its values go with it)'],
+  ['drag from an empty step', 'paint notes'],
+  ['drag ↕ on a note', 'pitch'],
+  ['⌥ SLIDE on, tap step', 'slide: hold into the next note, glide to it'],
+  ['⌥ SLIDE on, drag →', 'held note (synths): from here to there'],
+  ['tap track name', 'per-note values (GLOBAL: tempo, FX…)'],
+  ['hold track name', 'dub throw'],
+  ['drag in a value row', 'set · across = draw'],
+  ['⇧ SELECT on, drag in a value row', 'ramp: a straight line from that note to the finger'],
+  ['double-tap value', 'back to default'],
+  ['tap ruler', 'play from bar'],
+  ['drag ruler', 'select bars'],
+  ['⇧ SELECT on, drag in lanes', 'select an area'],
+  ['drag inside a selection', 'move the selection'],
+  ['PASTE', 'at the last step you touched'],
+  ['DICE', 'the selection, or the last note touched'],
+  ['two fingers', 'scroll (up/down = tracks, sideways = song)'],
+  ['pinch', 'zoom'],
+  ['double-tap fader', '0 dB'],
+];
+
+/** A phone or tablet: bigger steps and rows for fingers, and the touch bar. */
+const TOUCH = matchMedia('(pointer: coarse)').matches;
+
 const THROW_KEYS = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU'];
 
 // timeline geometry (px)
-const CELL_MAX = 22; // step width fully zoomed in (px)…
+const CELL_MAX = TOUCH ? 34 : 22; // step width fully zoomed in (px)…
 const CELL_MIN = 1; // …and fully out: the whole song is 4800 px
-const ROW_MIN = 40; // track lanes: one fixed height, open or closed (the panel scrolls if needed)
-const ROW_MAX = 40;
+const ROW_MIN = TOUCH ? 52 : 40; // track lanes: one fixed height, open or closed (the panel scrolls if needed)
+const ROW_MAX = ROW_MIN;
 const RULER_H = 20;
 const PAD = 9;
-const SUB_H = 22; // per-note bar rows of an expanded track (dragging pops out a tall slider)
+const SUB_H = TOUCH ? 30 : 22; // per-note bar rows of an expanded track (dragging pops out a tall slider)
 const GROUP_H = 5; // gap + divider above each group's first row (its name runs down the left)
 /** Per track: row index → name of the group it starts. */
 const GROUP_AT = TRACKS.map((_, i) => {
@@ -111,8 +138,9 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let scroller: HTMLElement, canvas: HTMLCanvasElement;
   let startStep = 0; // where Play starts (set by clicking the ruler)
   let follow = localStorage.getItem('dubbox.follow') !== '0'; // keep the playhead in view while playing (only you turn it on)
-  let CELL = CELL_MAX; // step width now: zoom glides it toward cellTarget
-  let cellTarget = CELL_MAX;
+  // step width now: zoom glides it toward cellTarget (a phone starts with about a bar on screen; pinch for more)
+  let CELL = TOUCH ? clamp(Math.floor((innerWidth - 120) / STEPS_PER_BAR), 20, CELL_MAX) : CELL_MAX;
+  let cellTarget = CELL;
   let zoomAt = 0; // px from the timeline's left edge that stays put while zooming…
   let zoomStep = 0; // …and the song position (in steps) pinned there
   let twoAxis = localStorage.getItem('dubbox.twoAxis') === '1'; // a trackpad was seen: wheel events scroll both ways
@@ -124,7 +152,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let help: HTMLElement, helpBtn: HTMLButtonElement, projectBtn: HTMLButtonElement;
   let helpOpen = false;
   let tracksEl: HTMLElement;
-  let mainH = 52; // height of a track's main lane, fitted to the window
+  let mainH = ROW_MIN; // height of a track's main lane, fitted to the window
   let spacerEl: HTMLElement;
   const rowAnim = new Map<string, number>(); // animated row heights
   let subLabels: HTMLElement[][] = [];
@@ -134,8 +162,13 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let clip: Clip | null = null;
   let hover: { ti: number; si: number; sub: number } | null = null; // step (and bar row) under the mouse
   let modHeld = false; // ⌘/Ctrl down: show where a paste would land
+  // touch bar latches: stand in for holding ⇧ / ⌥ (a finger can't)
+  let shiftLatch = false, altLatch = false;
+  const shift = (e: { shiftKey: boolean }) => e.shiftKey || shiftLatch;
+  const alt = (e: { altKey: boolean }) => e.altKey || altLatch;
   const undoStack: Snapshot[] = [];
   let redoStack: Snapshot[] = [];
+  let pushes = 0; // undo steps ever taken (the stack is capped, so its length can't tell)
   let pending: Snapshot | null = null; // taken at gesture start, committed on its first real change
   // ⇧-drag in an open row: a straight line from the press to the mouse, every note on it gets its point
   // pressing in a value row pops a tall slider out of that note for as long as the drag lasts
@@ -195,6 +228,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
   function pushUndo(snap: Snapshot) {
     undoStack.push(snap);
+    pushes++;
     if (undoStack.length > 100) undoStack.shift();
     redoStack = [];
   }
@@ -579,6 +613,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
 
     canvas.addEventListener('contextmenu', (e) => e.preventDefault()); // right button erases
     canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch' && touchDown(e)) return;
       if (e.button === 2) {
         const { si, ti, sub } = hit(e);
         if (ti < 0 || sub >= 0 || TRACKS[ti].global) return;
@@ -591,14 +626,14 @@ export function mountUI(root: HTMLElement, initial: Project) {
       }
       if (e.button !== 0) return;
       const { si, ti, sub, rowTop, ruler } = hit(e);
-      if (ruler || (e.shiftKey && ti >= 0 && sub < 0)) {
+      if (ruler || (shift(e) && ti >= 0 && sub < 0)) {
         canvas.setPointerCapture(e.pointerId);
         selDrag = { ruler, t0: ti, s0: si, ti, moved: false };
         if (!ruler) updateSel(si, ti);
         return;
       }
       if (ti < 0) return;
-      if (sel && sub < 0 && !e.altKey && ti >= sel.t0 && ti <= sel.t1 && si >= sel.s0 && si < sel.s1) {
+      if (sel && sub < 0 && !alt(e) && ti >= sel.t0 && ti <= sel.t1 && si >= sel.s0 && si < sel.s1) {
         canvas.setPointerCapture(e.pointerId);
         selMove = { ti, si0: si, base: snapshot(p), region: sel, clip: copy(p, sel), delta: 0, moved: false, bars: sel.t0 === 0 && sel.t1 === TRACKS.length - 1 };
         return;
@@ -623,7 +658,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
         pending = null;
         return;
       }
-      if (e.altKey) {
+      if (alt(e)) {
         if (!TRACKS[ti].slide) return;
         canvas.setPointerCapture(e.pointerId);
         hold = { ti, si0: si, hi: si, orig: { s: tr.s.slice(), note: tr.note.slice(), slide: tr.slide.slice() } };
@@ -633,6 +668,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       drag = { ti, si0: si, last: si, y: e.clientY, note: tr.note[si], mode: 'pending', paint: (tr.s[si] ? 0 : 1) as StepState, at: si, orig: null };
     });
     canvas.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch' && touchMove(e)) return;
       mouseX = e.offsetX;
       const h0 = hit(e);
       // while the slider is out, nothing under it reacts: hover stays on the row being dragged in
@@ -680,7 +716,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
         const b = bars;
         const { si } = hit(e);
         const tr = p.tracks[b.ti];
-        if (e.shiftKey) {
+        if (shift(e)) {
           // ⇧ during the drag: a straight line from the pressed note, at the value set there, to the mouse
           ramp = { ti: b.ti, id: b.id, si0: b.si0, idx0: slider!.cur, si1: si, idx1: sliderIdx(e.offsetY), orig: tr.locks[b.id].slice() };
           slider!.si = si;
@@ -815,7 +851,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
       slider = null;
       pending = null;
     };
-    canvas.addEventListener('pointerleave', () => {
+    canvas.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'touch') return; // a finger lifting: the last step touched stays the paste / dice target
       hover = null;
       mouseX = null;
     });
@@ -827,22 +864,91 @@ export function mountUI(root: HTMLElement, initial: Project) {
     });
     scroller.addEventListener('gesturechange', (e) => {
       e.preventDefault();
+      if (touches.size) return; // a finger pinch: the touch handlers zoom
       const scale = (e as unknown as { scale: number }).scale;
       zoomBy(scale / gestureScale);
       gestureScale = scale;
     });
-    canvas.addEventListener('pointerup', end);
-    canvas.addEventListener('pointercancel', end);
+    const up = (e: PointerEvent) => {
+      if (e.pointerType === 'touch' && touchUp(e)) return;
+      end();
+    };
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', up);
 
     // double-click a bar = back to the default value
-    canvas.addEventListener('dblclick', (e) => {
+    const resetValue = (e: MouseEvent) => {
       const { si, ti, sub } = hit(e);
       if (ti >= 0 && sub >= 0 && !ignored(ti, subRows(ti)[sub], si)) {
         pending = snapshot(p);
         setLock(ti, subRows(ti)[sub], si, NO_LOCK);
         pending = null;
       }
-    });
+    };
+    canvas.addEventListener('dblclick', resetValue);
+
+    // ---- touch: one finger works like the mouse, two fingers scroll and pinch-zoom
+    const touches = new Map<number, { x: number; y: number }>();
+    let pan: { mx: number; my: number; dist: number; cell: number; step: number; top: number } | null = null;
+    let gesture: { pushes: number; sel: Region | null } | null = null; // to take back a one-finger edit a second finger turned into a pan
+    let lastTap: { at: number; x: number; y: number } | null = null;
+    const twoFingers = () => {
+      const [a, b] = [...touches.values()];
+      return { mx: (a.x + b.x) / 2 - scroller.getBoundingClientRect().left, my: (a.y + b.y) / 2, dist: Math.hypot(a.x - b.x, a.y - b.y) || 1 };
+    };
+    /** Drop whatever the first finger started, and undo what it already changed. */
+    const abort = () => {
+      const g = gesture;
+      // not end(): that finishes a click (toggles the step), this throws the gesture away
+      drag = bars = ramp = hold = selDrag = selMove = null;
+      editRow = slider = pending = null;
+      rampHi = -1;
+      if (g && pushes > g.pushes) {
+        undo(false);
+        redoStack.pop();
+      }
+      if (g) sel = g.sel;
+      gesture = null;
+    };
+    /** True when the touch handlers took the event (pans, extra fingers, double-tap on a value). */
+    const touchDown = (e: PointerEvent) => {
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 2 && !pan) {
+        abort();
+        const m = twoFingers();
+        pan = { ...m, cell: CELL, step: (scroller.scrollLeft + m.mx) / CELL, top: tracksEl.scrollTop };
+        setFollow(false);
+        return true;
+      }
+      if (pan || touches.size > 1) return true;
+      const now = performance.now();
+      const dbl = !!lastTap && now - lastTap.at < 300 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 24;
+      lastTap = dbl ? null : { at: now, x: e.clientX, y: e.clientY };
+      if (dbl && hit(e).sub >= 0) {
+        resetValue(e);
+        return true;
+      }
+      gesture = { pushes, sel };
+      return false;
+    };
+    const touchMove = (e: PointerEvent) => {
+      if (!touches.has(e.pointerId)) return false;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (!pan) return touches.size > 1;
+      if (touches.size < 2) return true;
+      const m = twoFingers();
+      CELL = cellTarget = clamp((pan.cell * m.dist) / pan.dist, CELL_MIN, CELL_MAX);
+      spacerEl.style.width = `${SONG_STEPS * CELL}px`;
+      scroller.scrollLeft = pan.step * CELL - m.mx;
+      tracksEl.scrollTop = pan.top - (m.my - pan.my);
+      return true;
+    };
+    const touchUp = (e: PointerEvent) => {
+      touches.delete(e.pointerId);
+      if (!pan) return false;
+      if (!touches.size) pan = null; // done once every finger is off
+      return true;
+    };
 
     // ⌘/Ctrl-wheel (and trackpad pinch) = smooth zoom around the mouse.
     // Vertical wheel over an active step = note. Otherwise wheel scrolls the timeline.
@@ -1268,9 +1374,16 @@ export function mountUI(root: HTMLElement, initial: Project) {
       p.tracks[ti].vol = v;
       flagsChanged(ti);
     };
+    let tapAt = 0;
     el.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
+      if (e.pointerType === 'touch') {
+        // fingers don't double-click: a quick second tap = 0 dB
+        const now = performance.now();
+        if (now - tapAt < 300) return set(0);
+        tapAt = now;
+      }
       el.setPointerCapture(e.pointerId);
       const y0 = e.clientY, v0 = p.tracks[ti].vol;
       const move = (ev: PointerEvent) => set(v0 + (y0 - ev.clientY) / 4);
@@ -1300,6 +1413,40 @@ export function mountUI(root: HTMLElement, initial: Project) {
     const b = h('button', cls, label);
     b.addEventListener('click', onClick);
     return b;
+  }
+
+  /**
+   * Phones and tablets (CSS hides it elsewhere): latches for ⇧ and ⌥, and the keyboard's edit
+   * shortcuts as buttons. A latch stays on until tapped again.
+   */
+  function touchbar() {
+    const bar = h('div', 'touchbar');
+    const latch = (label: string, get: () => boolean, put: (on: boolean) => void, title: string) => {
+      const b = button(label, 'btn small' + (get() ? ' lit' : ''), () => {
+        put(!get());
+        b.classList.toggle('lit', get());
+      });
+      b.title = title;
+      return b;
+    };
+    const key = (code: string, shiftKey = false) => () => editKey({ code, shiftKey } as KeyboardEvent);
+    bar.append(
+      latch('⇧ SELECT', () => shiftLatch, (on) => (shiftLatch = on), 'drag in lanes = select an area · in a value row = ramp'),
+      latch('⌥ SLIDE', () => altLatch, (on) => (altLatch = on), 'tap a step = slide · drag right = held note'),
+      h('div', 'spacer'),
+      button('UNDO', 'btn small', key('KeyZ')),
+      button('REDO', 'btn small', key('KeyZ', true)),
+      button('COPY', 'btn small', key('KeyC')),
+      button('CUT', 'btn small', key('KeyX')),
+      button('PASTE', 'btn small', key('KeyV')),
+      button('DUP', 'btn small', key('KeyD')),
+      button('DEL', 'btn small', () => {
+        const r0 = sel;
+        if (r0) edit(() => clear(p, r0));
+      }),
+      button('DICE', 'btn small', dice),
+    );
+    return bar;
   }
 
   // ---- projects ---------------------------------------------------------
@@ -1383,6 +1530,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       else document.documentElement.requestFullscreen().catch(() => {});
     });
     fullBtn.title = 'fullscreen';
+    fullBtn.hidden = !document.fullscreenEnabled; // iPhone: no fullscreen for pages (Add to Home Screen instead)
     document.onfullscreenchange = () => fullBtn.classList.toggle('lit', !!document.fullscreenElement);
     loopBtn = button('LOOP', 'btn small' + (loop ? ' lit' : ''), toggleLoop);
     loopBtn.title = 'loop the selection, or the current bar (L)';
@@ -1409,7 +1557,28 @@ export function mountUI(root: HTMLElement, initial: Project) {
       name.title = td.global
         ? 'click = show the song-wide values (scale, key, tempo, FX)'
         : `click = show sound per note · hold ${THROW_KEYS[ti].slice(3)} = dub throw · ${ti + 1} = mute · shift+${ti + 1} = solo`;
+      // touch: no Q–U keys, so holding the name throws (a tap still opens the rows)
+      let held = false;
+      let holdTimer = 0;
+      name.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'touch' || td.global) return;
+        held = false;
+        holdTimer = window.setTimeout(() => {
+          held = true;
+          setThrow(ti, true);
+        }, 250);
+      });
+      const release = () => {
+        clearTimeout(holdTimer);
+        if (held) setThrow(ti, false);
+      };
+      name.addEventListener('pointerup', release);
+      name.addEventListener('pointercancel', release);
       name.addEventListener('click', () => {
+        if (held) {
+          held = false; // that was a throw
+          return;
+        }
         toggleTrack(ti);
       });
       const toggles = h('div', 'toggles');
@@ -1447,14 +1616,15 @@ export function mountUI(root: HTMLElement, initial: Project) {
     // shortcuts: hidden until asked for (? button or key), floating over the timeline
     help = h('div', 'help');
     help.hidden = !helpOpen;
+    if (TOUCH) help.addEventListener('click', () => setHelp(false)); // no Esc on a phone
     helpBtn.classList.toggle('lit', helpOpen);
-    for (const [key, what] of HELP) {
+    for (const [key, what] of TOUCH ? TOUCH_HELP : HELP) {
       const item = h('div');
       item.append(h('span', 'key', key), what);
       help.append(item);
     }
 
-    root.append(header, tracks, help);
+    root.append(header, tracks, touchbar(), help);
     sizeCanvas(); // fit the lanes to the window before the first frame
     p.tracks.forEach((_, i) => renderHead(i));
     scroller.scrollLeft = scrollLeft;

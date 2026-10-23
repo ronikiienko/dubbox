@@ -15,8 +15,8 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; user-select: none; }
-#app { height: 100vh; display: flex; flex-direction: column; }
+body { margin: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+#app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; } /* dvh: phones' moving browser bars */
 
 button {
   font: inherit;
@@ -27,6 +27,8 @@ button {
   cursor: pointer;
 }
 button:hover { border-color: var(--dim); }
+button { touch-action: manipulation; } /* no double-tap zoom on phones */
+[hidden] { display: none !important; }
 
 /* ---- header ---- */
 /* no boxes: a flat top bar over an edge-to-edge timeline */
@@ -176,3 +178,55 @@ header {
 .keep-title { color: var(--accent); letter-spacing: 0.1em; }
 .keep .project-name { border-color: var(--line); background: var(--bg); }
 .keep-row { display: flex; gap: 8px; }
+
+/* ---- touch bar: ⇧ / ⌥ latches + edit shortcuts (phones and tablets only) ---- */
+.touchbar { display: none; }
+
+/* ---- phones and tablets: finger-sized lanes, names stacked over their buttons ---- */
+@media (pointer: coarse) {
+  .touchbar {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+  }
+  .touchbar .btn.small, header .btn { padding: 8px 10px; color: var(--text); }
+  .touchbar .btn.small.lit { color: var(--bg); }
+  .tracks { grid-template-columns: 104px minmax(0, 1fr); gap: 8px; padding-left: 8px; }
+  .head { flex-direction: column; align-items: flex-start; justify-content: center; gap: 5px; }
+  .name { touch-action: none; } /* holding a name = dub throw: don't let the panel scroll steal it */
+  .tog { width: 30px; height: 24px; }
+  .fader { width: 32px; height: 24px; }
+  .subname { height: 30px; line-height: 30px; }
+  .sublabel { height: 30px; }
+  .name:hover { color: inherit; }
+  button:hover { border-color: var(--line); }
+}
+
+/* ---- narrow screens: the header wraps, dialogs go single-column ---- */
+@media (max-width: 760px) {
+  header { flex-wrap: wrap; gap: 6px; padding: 8px 10px; padding-top: max(8px, env(safe-area-inset-top)); }
+  .logo { display: none; }
+  header > .spacer { display: none; }
+  .project-btn { max-width: 140px; }
+  .help { grid-template-columns: 1fr; right: 8px; left: 8px; width: auto; top: 8px; max-height: calc(100dvh - 16px); overflow-y: auto; }
+  .projects-back { padding-top: max(8px, env(safe-area-inset-top)); }
+  .projects { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .projects-top { flex-wrap: wrap; padding: 10px; }
+  .project {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'name name' 'map info' 'acts acts';
+    gap: 8px 12px;
+    padding: 10px;
+  }
+  .project > :nth-child(1) { grid-area: name; }
+  .project > :nth-child(2) { grid-area: map; }
+  .project > :nth-child(3) { grid-area: info; }
+  .project > :nth-child(4) { grid-area: acts; }
+  .project-name { font-size: 16px; } /* 16px+: iPhone doesn't zoom in on focus */
+  .keep-back { padding-top: 12vh; }
+}
