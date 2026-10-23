@@ -870,7 +870,8 @@ export function mountUI(root: HTMLElement, initial: Project) {
     // on a small dark tag along the top, over the bars
     for (const [label, si, bright] of labels) {
       const tw = ctx.measureText(label).width;
-      const cx = si * CELL - x0 + CELL / 2;
+      // centred on its note, but kept fully on screen at the edges
+      const cx = clamp(si * CELL - x0 + CELL / 2, tw / 2 + 3, w - tw / 2 - 3);
       ctx.fillStyle = COLORS.bg;
       ctx.fillRect(cx - tw / 2 - 2, rowTop + gap + 1, tw + 4, 12);
       ctx.fillStyle = bright ? COLORS.text : COLORS.dim;
