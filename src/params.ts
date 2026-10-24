@@ -98,8 +98,9 @@ export interface TrackDef {
 }
 
 export const TRACKS: TrackDef[] = [
-  // Every voice has the same core: LP (lowpass), Res, HP (highpass, off by default), Decay.
-  { name: 'KICK', voice: ['kick.punch', 'kick.click', 'kick.lp', 'kick.res', 'kick.hp', 'kick.decay'] },
+  // Every voice has the same core: LP (lowpass), Res, HP (highpass, off by default), Decay. KICK has no Res:
+  // a static resonant lowpass on a sine kick only thinned it.
+  { name: 'KICK', voice: ['kick.punch', 'kick.click', 'kick.lp', 'kick.hp', 'kick.decay'] },
   { name: 'HAT', voice: ['hat.metal', 'hat.lp', 'hat.res', 'hat.hp', 'hat.decay'] },
   { name: 'PERC', voice: ['perc.lp', 'perc.res', 'perc.hp', 'perc.decay'] },
   { name: 'SNARE', voice: ['snare.snap', 'snare.lp', 'snare.res', 'snare.hp', 'snare.decay'] },
@@ -129,7 +130,7 @@ export function rowGroups(i: number): { name: string; ids: string[] }[] {
   const own = TRACKS[i].voice.filter((id) => !CORE.includes(id.slice(id.indexOf('.') + 1)));
   return [
     { name: 'Note', ids: [mixId(i, 'rat'), ...own, coreId(i, 'decay')] },
-    { name: 'Filter', ids: [coreId(i, 'lp'), coreId(i, 'res'), coreId(i, 'hp')] },
+    { name: 'Filter', ids: [coreId(i, 'lp'), coreId(i, 'res'), coreId(i, 'hp')].filter(Boolean) },
     { name: 'Color', ids: [mixId(i, 'dst'), mixId(i, 'crs'), mixId(i, 'phs')] },
     { name: 'Mix', ids: [mixId(i, 'lvl'), mixId(i, 'pan')] },
     { name: 'Sends', ids: [mixId(i, 'dly'), mixId(i, 'dtime'), mixId(i, 'dfbk'), mixId(i, 'dtone'), mixId(i, 'dwob'), mixId(i, 'dspr'), mixId(i, 'dverb'), mixId(i, 'rev')] },
@@ -279,10 +280,10 @@ export function hpHz(voice: string, n: number): number {
   return tableAt(HP_HZ[voice].slice(1), (Math.max(n, 0.125) - 0.125) / 0.875);
 }
 
-/** The shared core every voice has. LP: the voice's table; `lpDef` = its default position. */
-const core = (k: string, lpDef: number, res: number, decay: [number, number, number]) => [
+/** The shared core every voice has. LP: the voice's table; `lpDef` = its default position. `res` null = no Res. */
+const core = (k: string, lpDef: number, res: number | null, decay: [number, number, number]) => [
   p({ id: `${k}.lp`, label: 'Lowpass', min: LP_HZ[k][0], max: LP_HZ[k][8], def: LP_HZ[k][lpDef], curve: 'table', table: LP_HZ[k], fmt: hz }),
-  p({ id: `${k}.res`, label: 'Resonance', min: 0, max: 0.95, def: res, curve: 'lin' }),
+  ...(res === null ? [] : [p({ id: `${k}.res`, label: 'Resonance', min: 0, max: 0.95, def: res, curve: 'lin' })]),
   // position 0 = off (bypassed); 1..8 = the voice's HP_HZ
   p({ id: `${k}.hp`, label: 'Highpass', min: 0, max: 1, def: 0, curve: 'lin', fmt: (v) => (hpHz(k, v) ? hz(hpHz(k, v)) : 'off') }),
   p({ id: `${k}.decay`, label: 'Decay', min: decay[0], max: decay[1], def: decay[2], curve: 'exp', fmt: sec }),
@@ -309,7 +310,7 @@ export const PARAMS: ParamDef[] = [
   // drum LP defaults fully open (top); Decay defaults to the middle
   p({ id: 'kick.punch', label: 'Punch', min: 0, max: 1, def: 0.5, curve: 'lin' }),
   p({ id: 'kick.click', label: 'Click', min: 0, max: 1, def: 0, curve: 'lin' }),
-  ...core('kick', 8, 0, around(0.45, 4)),
+  ...core('kick', 8, null, around(0.45, 4)),
   p({ id: 'hat.metal', label: 'Metal', min: 0, max: 1, def: 0, curve: 'lin' }),
   ...core('hat', 8, 0, around(0.06, 8)),
   ...core('perc', 8, 0.25, around(0.12, 4)),

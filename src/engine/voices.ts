@@ -12,7 +12,6 @@ const ratio = (note: number) => Math.pow(2, note / 12);
 export class Kick implements Voice {
   private filter = new Ladder();
   private tone = 12000;
-  private res = 0;
   private ph = 0;
   private amp = 0;
   private pEnv = 0;
@@ -31,10 +30,9 @@ export class Kick implements Voice {
   constructor(private sr: number) {
     this.cDec = Math.exp(-1 / (0.0015 * sr));
   }
-  set(tone: number, res: number, decay: number, punch: number, click: number, root: number) {
+  set(tone: number, decay: number, punch: number, click: number, root: number) {
     this.tune = mtof(26 + rootAbove(root, 2)); // D1 = MIDI 26
     this.tone = tone;
-    this.res = res;
     this.dec = decayCoef(decay, this.sr);
     this.punch = punch;
     this.click = click;
@@ -65,7 +63,7 @@ export class Kick implements Voice {
       this.cEnv *= this.cDec;
     }
     this.amp *= this.dec;
-    return this.filter.process(tanh(x * 1.5), this.tone, this.res, this.sr) * 0.9;
+    return this.filter.process(tanh(x * 1.5), this.tone, 0, this.sr) * 0.9;
   }
 }
 
