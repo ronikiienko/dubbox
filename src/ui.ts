@@ -27,7 +27,7 @@ const HELP: [string, string][] = [
   ['space', 'play / stop'],
   ['F', 'follow playhead'],
   ['1–7 / ⇧1–7', 'mute / solo'],
-  ['hold Q W E R T Y U', 'dub throw'],
+  ['hold Q W E R T Y U', 'delay throw'],
   ['click step', 'on / off'],
   ['drag a note sideways', 'move it (all its values go with it)'],
   ['drag inside a selection', 'move the selection'],
@@ -110,12 +110,12 @@ export function mountUI(root: HTMLElement, initial: Project) {
   let playBtn: HTMLButtonElement, recBtn: HTMLButtonElement, followBtn: HTMLButtonElement, loopBtn: HTMLButtonElement;
   let scroller: HTMLElement, canvas: HTMLCanvasElement;
   let startStep = 0; // where Play starts (set by clicking the ruler)
-  let follow = localStorage.getItem('dubbox.follow') !== '0'; // keep the playhead in view while playing (only you turn it on)
+  let follow = localStorage.getItem('gridbox.follow') !== '0'; // keep the playhead in view while playing (only you turn it on)
   let CELL = CELL_MAX; // step width now: zoom glides it toward cellTarget
   let cellTarget = CELL_MAX;
   let zoomAt = 0; // px from the timeline's left edge that stays put while zooming…
   let zoomStep = 0; // …and the song position (in steps) pinned there
-  let twoAxis = localStorage.getItem('dubbox.twoAxis') === '1'; // a trackpad was seen: wheel events scroll both ways
+  let twoAxis = localStorage.getItem('gridbox.twoAxis') === '1'; // a trackpad was seen: wheel events scroll both ways
   let mouseX: number | null = null; // pointer over the timeline (px from its left edge)
   let loop: { s0: number; s1: number } | null = null; // playback repeats steps s0..s1 (exclusive)
   let expanded = -1; // track showing its per-note bar rows
@@ -321,7 +321,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
   /** The button / F: your choice is remembered; scrolling only switches it off for now. */
   function toggleFollow() {
     setFollow(!follow);
-    localStorage.setItem('dubbox.follow', follow ? '1' : '0');
+    localStorage.setItem('gridbox.follow', follow ? '1' : '0');
   }
 
   // ---- lane geometry ----------------------------------------------------
@@ -857,7 +857,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       // sideways scroll without ⇧ gives it away (remembered). A plain mouse wheel scrolls the song.
       if (e.deltaX !== 0 && !e.shiftKey && !twoAxis) {
         twoAxis = true;
-        localStorage.setItem('dubbox.twoAxis', '1');
+        localStorage.setItem('gridbox.twoAxis', '1');
       }
       e.preventDefault();
       if (twoAxis) {
@@ -1389,7 +1389,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
     projectBtn = button(currentMeta().name, 'btn small project-btn', openProjects);
     projectBtn.title = 'projects: open, rename, copy, export (⌘O)';
     header.append(
-      h('div', 'logo', 'DUBBOX'),
+      h('div', 'logo', 'GRIDBOX'),
       playBtn, recBtn, fmtBtn, exportBtn, followBtn, loopBtn,
       h('div', 'spacer'),
       fullBtn,
@@ -1408,7 +1408,7 @@ export function mountUI(root: HTMLElement, initial: Project) {
       const name = h('div', 'name', (ti === expanded ? '▾ ' : '▸ ') + td.name);
       name.title = td.global
         ? 'click = show the song-wide values (scale, key, tempo, FX)'
-        : `click = show sound per note · hold ${THROW_KEYS[ti].slice(3)} = dub throw · ${ti + 1} = mute · shift+${ti + 1} = solo`;
+        : `click = show sound per note · hold ${THROW_KEYS[ti].slice(3)} = delay throw · ${ti + 1} = mute · shift+${ti + 1} = solo`;
       name.addEventListener('click', () => {
         toggleTrack(ti);
       });

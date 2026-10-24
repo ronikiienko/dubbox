@@ -1,8 +1,8 @@
-# DUBBOX
+# GRIDBOX
 
-A tiny browser groovebox for dub techno and 90s techno. One screen, one 300-bar song, every sound shaped **per note**.
+A tiny browser groovebox for electronic music. One screen, one 300-bar song, every sound shaped **per note**.
 
-### ▶ [Open DUBBOX](https://ronikiienko.github.io/dubbox/)
+### ▶ [Open GRIDBOX](https://ronikiienko.github.io/gridbox/)
 
 Runs entirely in the browser (Chrome, Safari, Firefox on desktop). Nothing to install, no account. Your projects autosave in the browser.
 
@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/0cf6a14f-f53a-435a-91c5-f45d84d625f5
 
 ## Philosophy
 
-DUBBOX came from feeling overwhelmed by everything a DAW like FL Studio puts in front of you.
+GRIDBOX came from feeling overwhelmed by everything a DAW like FL Studio puts in front of you.
 
 FL Studio's automation is super flexible, but I wanted something more accessible. So here almost everything is **per note**: each note carries its own filter, decay, distortion, pan, sends and so on. Changing the sound over time is part of writing the notes, not a separate automation job.
 
@@ -23,7 +23,7 @@ The rest is simplified the same way. There's no piano roll, and I tried to add o
 - **7 tracks:** KICK, HAT, PERC, SNARE, BASS, CHORD, MELODY, plus a **GLOBAL** lane for tempo, scale, swing and reverb.
 - **One linear song** on a 16th-step grid. No patterns: you draw the whole track on one timeline.
 - **No knobs, no automation lanes.** Click a track name to open its value rows, grouped as Note · Filter · Color · Mix · Sends, and set them per note.
-- **Dub tools:** a tape delay per track, its time, feedback, tone, wobble, width (up to ping-pong) and reverb amount changeable on any step, hold-a-key throws, room/spring reverb, tape saturation, mute/solo for live arranging.
+- **Space tools:** a tape delay per track, its time, feedback, tone, wobble, width (up to ping-pong) and reverb amount changeable on any step, hold-a-key throws, room/spring reverb, tape saturation, mute/solo for live arranging.
 - **REC** records what you hear to WAV or MP3, or a **VIDEO** of the app with its sound (pick this tab when the browser asks).
 - **EXPORT** renders the whole song to WAV or MP3 offline: nothing has to play, and it's faster than realtime.
 
@@ -42,7 +42,7 @@ The rest is simplified the same way. There's no piano roll, and I tried to add o
 | Zoom | `⌘`-wheel, pinch, or `−` / `=` |
 | Copy / paste / duplicate | `⌘C` `⌘V` `⌘D` |
 | Dice (random nudge) | `D` |
-| Dub throw | hold `Q W E R T Y U` |
+| Delay throw | hold `Q W E R T Y U` |
 | Mute / solo | `1–7` / `⇧1–7` |
 | Track volume | drag the dB number next to M / S |
 

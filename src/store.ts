@@ -23,7 +23,7 @@ export interface ProjectStore {
 /** IndexedDB: metadata and song text in separate stores, so listing doesn't load every song. */
 function idbStore(): ProjectStore {
   const db = new Promise<IDBDatabase>((res, rej) => {
-    const r = indexedDB.open('dubbox', 1);
+    const r = indexedDB.open('gridbox', 1);
     r.onupgradeneeded = () => {
       r.result.createObjectStore('meta', { keyPath: 'id' });
       r.result.createObjectStore('text');

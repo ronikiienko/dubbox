@@ -161,7 +161,7 @@ export class Perc implements Voice {
 }
 
 /**
- * Snare ↔ clap. Snap 0: two tuned sine heads + a little noise (round dub snare); 0.5: body + bright
+ * Snare ↔ clap. Snap 0: two tuned sine heads + a little noise (round snare); 0.5: body + bright
  * noise (909-ish); 1: clap = three noise bursts 11 ms apart, then a tail, no body.
  */
 export class Snare implements Voice {

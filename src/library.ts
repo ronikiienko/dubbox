@@ -8,8 +8,8 @@ import { download } from './wav';
 
 export type { ProjectMeta };
 
-const CURRENT = 'dubbox.current'; // id of the open project
-const OLD_KEY = 'dubbox.project'; // before the library there was one autosaved song here
+const CURRENT = 'gridbox.current'; // id of the open project
+const OLD_KEY = 'gridbox.project'; // before the library there was one autosaved song here
 export const UNTITLED = 'Untitled';
 
 let current: ProjectMeta = { id: '', name: UNTITLED, modified: 0, tempo: 0, bars: 0, map: [] };
@@ -163,7 +163,7 @@ async function shareText(meta: ProjectMeta): Promise<string> {
   return `{"name":${JSON.stringify(meta.name)},${text.slice(1)}`;
 }
 
-const fileName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'dubbox';
+const fileName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'gridbox';
 
 export async function exportFile(meta: ProjectMeta) {
   download(await shareText(meta), 'application/json', 'json', fileName(meta.name));
@@ -184,20 +184,20 @@ export async function exportAll() {
   const items = await Promise.all(
     metas.map(async (m) => `{"name":${JSON.stringify(m.name)},"modified":${m.modified},"project":${(await store.read(m.id)) ?? '{}'}}`),
   );
-  download(`{"dubbox":"library","projects":[\n${items.join(',\n')}\n]}`, 'application/json', 'json', `dubbox-library-${new Date().toISOString().slice(0, 10)}`);
+  download(`{"gridbox":"library","projects":[\n${items.join(',\n')}\n]}`, 'application/json', 'json', `gridbox-library-${new Date().toISOString().slice(0, 10)}`);
 }
 
 /** Import pasted or loaded text: one project, or an EXPORT ALL bundle. Returns the new projects. */
 export async function importText(text: string, fallbackName: string): Promise<ProjectMeta[]> {
-  let raw: { dubbox?: string; projects?: { name?: unknown; modified?: unknown; project?: unknown }[]; name?: unknown; tracks?: unknown };
+  let raw: { gridbox?: string; projects?: { name?: unknown; modified?: unknown; project?: unknown }[]; name?: unknown; tracks?: unknown };
   try {
     raw = JSON.parse(text);
   } catch {
-    throw new Error('that isn\'t a DUBBOX project');
+    throw new Error('that isn\'t a GRIDBOX project');
   }
   const isSong = (x: unknown): x is Parameters<typeof fromSaved>[0] => !!x && typeof x === 'object' && Array.isArray((x as { tracks?: unknown }).tracks);
   const name = (x: unknown) => (typeof x === 'string' ? x : fallbackName);
-  if (raw?.dubbox === 'library' && Array.isArray(raw.projects)) {
+  if (raw?.gridbox === 'library' && Array.isArray(raw.projects)) {
     const added: ProjectMeta[] = [];
     for (const it of raw.projects) {
       if (isSong(it.project)) added.push(await add(name(it.name), fromSaved(it.project), typeof it.modified === 'number' ? it.modified : Date.now()));
@@ -205,6 +205,6 @@ export async function importText(text: string, fallbackName: string): Promise<Pr
     return added;
   }
   const songName = name(raw?.name);
-  if (!isSong(raw)) throw new Error('that isn\'t a DUBBOX project');
+  if (!isSong(raw)) throw new Error('that isn\'t a GRIDBOX project');
   return [await add(songName, fromSaved(raw))];
 }

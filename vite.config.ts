@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 
-// GitHub Pages serves the app from /dubbox/
+// GitHub Pages serves the app from /gridbox/
 export default defineConfig({
-  base: '/dubbox/',
+  base: '/gridbox/',
 });

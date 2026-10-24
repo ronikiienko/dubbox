@@ -374,7 +374,7 @@ class Wander {
 }
 
 /**
- * Master tape macro. One knob, Age 0..1: 0 clean · 0.3 warm · 0.6 good cassette · 1 worn dub cassette.
+ * Master tape macro. One knob, Age 0..1: 0 clean · 0.3 warm · 0.6 good cassette · 1 worn cassette.
  * Chain per channel: pre-emphasis → level-matched saturation → de-emphasis → head bump → low cut
  * → stereo narrowing → wow/flutter (random, shared transport) → dropouts → hiss → top roll-off.
  */

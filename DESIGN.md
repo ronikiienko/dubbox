@@ -1,6 +1,6 @@
-# DUBBOX: design spec
+# GRIDBOX: design spec
 
-A tiny browser-based groovebox for dub techno and 90s techno.
+A tiny browser-based groovebox for electronic music.
 One screen, one pattern, about 40 knobs total. You perform it, record it, done.
 
 ---
@@ -69,7 +69,7 @@ Every voice has **exactly the same** per-note values.
 | **Dist** | saturation, loudness-matched | ✓ | ✓ | ✓ | ✓ |
 | Phs · Lvl · **Pan** · Dly · Rev | mixer; Pan defaults to centre, equal-power, sends stay centred (pre-pan) | ✓ | ✓ | ✓ | ✓ |
 
-**Ratchet** is the first row on every instrument: hits per step 1× (default), 2×, 3×, 4×, 6×, 8×, evenly spaced inside the step (same pitch and values; synths retrigger their envelope). Drawn as ticks along the bottom of the note. Row order is Ratchet, (unique rows), LP, Res, HP, Decay, Dist, Bitcrush, Phs, Lvl, Pan, Dly, Rev, identical on every track. **Bitcrush** (after Dist, before Phs): per position [bits, rate] = off, 12-bit 26 kHz (SP-1200), 12/22k, 10/16k, 8/12k, 8/8k, 6/6k, 5/4k, 4/2.5k; sample-and-hold without anti-aliasing + quantize. CHORD has one extra row on top: **Size**. SNARE has one: **Snap** (snare → clap: 0 = two tuned sine heads 185/330 Hz × pitch with a short pitch drop + a little HP-noise, a round dub snare; 4 = default, body + bright noise, 909-ish; 8 = clap: three band-passed noise bursts 11 ms apart then a tail, no body; three anchors loudness-matched within ~0.7 dB). Keys: 1–7 mute/solo, Q W E R T Y U throws. Files before v4 get an empty SNARE inserted at index 3 (later tracks and their mix ids move up one). HAT has one: **Metal** (crossfade from noise to the 808 cluster of six squares at 205/304/370/523/540/800 Hz × pitch, through the same HP/LP; default 0 = noise). KICK has two: **Punch** (pitch drop at the hit: depth and speed together, 0 = flat sub sine, 4 = default 4×→1× over 30 ms, 8 = hard knock from 13×) and **Click** (1–3 ms beater tick, noise + 2.5 kHz blip through the kick's LP; default 0).
+**Ratchet** is the first row on every instrument: hits per step 1× (default), 2×, 3×, 4×, 6×, 8×, evenly spaced inside the step (same pitch and values; synths retrigger their envelope). Drawn as ticks along the bottom of the note. Row order is Ratchet, (unique rows), LP, Res, HP, Decay, Dist, Bitcrush, Phs, Lvl, Pan, Dly, Rev, identical on every track. **Bitcrush** (after Dist, before Phs): per position [bits, rate] = off, 12-bit 26 kHz (SP-1200), 12/22k, 10/16k, 8/12k, 8/8k, 6/6k, 5/4k, 4/2.5k; sample-and-hold without anti-aliasing + quantize. CHORD has one extra row on top: **Size**. SNARE has one: **Snap** (snare → clap: 0 = two tuned sine heads 185/330 Hz × pitch with a short pitch drop + a little HP-noise, a round snare; 4 = default, body + bright noise, 909-ish; 8 = clap: three band-passed noise bursts 11 ms apart then a tail, no body; three anchors loudness-matched within ~0.7 dB). Keys: 1–7 mute/solo, Q W E R T Y U throws. Files before v4 get an empty SNARE inserted at index 3 (later tracks and their mix ids move up one). HAT has one: **Metal** (crossfade from noise to the 808 cluster of six squares at 205/304/370/523/540/800 Hz × pitch, through the same HP/LP; default 0 = noise). KICK has two: **Punch** (pitch drop at the hit: depth and speed together, 0 = flat sub sine, 4 = default 4×→1× over 30 ms, 8 = hard knock from 13×) and **Click** (1–3 ms beater tick, noise + 2.5 kHz blip through the kick's LP; default 0).
 Copying notes between tracks carries every value by its knob position.
 
 ### Effects (global)
@@ -153,9 +153,9 @@ Song structure = what you place on the timeline, plus mutes and knob moves perfo
 
 ## 4. Performance
 
-### 4.1 Dub throws
+### 4.1 Delay throws
 
-- Hold **Q W E R T** (tracks 1–5): that track's delay send jumps to 100% while held, then returns. This is the core dub move.
+- Hold **Q W E R T** (tracks 1–5): that track's delay send jumps to 100% while held, then returns.
 - Keys **1–5** toggle mutes. **Space** = play/stop.
 
 ---
@@ -204,7 +204,7 @@ in ──► [+]──► delayline(time, wow) ──► out
         ▲                    │
         └── tanh ◄─ LP ◄─ HP ◄┘   × feedback
 ```
-- **Time**, labelled as **repeats per bar** (tempo-synced): `16, 12, 8, 6, 5⅓, 4, 3, 2⅔, 2 per bar` = `1, 1⅓, 2, 2⅔, 3, 4, 5⅓, 6, 8` grid steps apart (a step is one cell, 4 steps a beat). Up = longer echo. 12, 6 and 3 per bar are **triplets**: notes can't sit between grid cells, but echoes can. 5⅓ and 2⅔ per bar are the dotted ones (3 and 6 steps); 5⅓ (the dub dotted eighth) is the default. 2 per bar is the longest: at 60 bpm it is 2 s, within the 4 s tape buffer. v7 inserted the triplets; older files' positions (1 2 3 4 6 steps) are remapped on load.
+- **Time**, labelled as **repeats per bar** (tempo-synced): `16, 12, 8, 6, 5⅓, 4, 3, 2⅔, 2 per bar` = `1, 1⅓, 2, 2⅔, 3, 4, 5⅓, 6, 8` grid steps apart (a step is one cell, 4 steps a beat). Up = longer echo. 12, 6 and 3 per bar are **triplets**: notes can't sit between grid cells, but echoes can. 5⅓ and 2⅔ per bar are the dotted ones (3 and 6 steps); 5⅓ (the classic dotted eighth) is the default. 2 per bar is the longest: at 60 bpm it is 2 s, within the 4 s tape buffer. v7 inserted the triplets; older files' positions (1 2 3 4 6 steps) are remapped on load.
 - Delay time changes are **slewed (~300 ms)**, so the pitch smears like tape. Fractional read with cubic/linear interpolation.
 - Small wow on the read position: 0.4 Hz sine, ±0.6 ms, plus a tiny random component.
 - **Fbk** 0–1.1. Above 1 it's held in check by `tanh` → blooms instead of exploding.
@@ -239,7 +239,7 @@ track: voice ─► hp ─► dist ─► phaser ─► fader ─┬─► sum �
                                  └─► reverb send ─► reverb ret ─► sum
 ```
 - **GLUE** (no knob): RMS compressor, ratio 2:1, attack 10 ms, release 150 ms, threshold ≈ −12 dBFS, ~2 dB GR on a typical mix.
-- **TAPE / Age** (one macro, 0..1): **0** clean (bypassed) · **0.3** warm (default) · **0.6** good cassette · **1** worn dub cassette.
+- **TAPE / Age** (one macro, 0..1): **0** clean (bypassed) · **0.3** warm (default) · **0.6** good cassette · **1** worn cassette.
   - Saturation: pre-emphasis (highs boosted ~3 kHz) → loudness-matched `Drive` (amount 0.55 × Age) → de-emphasis, so highs compress first (tape softness). Overall level stays within ~0.7 dB at any Age.
   - Head bump +0…4 dB at 90 Hz; low cut 10 → 50 Hz; top roll-off 20 → 5 kHz (12 dB), applied after the hiss so hiss is rolled off too.
   - Wow/flutter: random (smooth random targets, not sine LFOs). Wow is shared by both channels (one transport), flutter slightly different per channel. Measured pitch wander ±0.25 % at 0.6, ±0.94 % at 1.
@@ -285,10 +285,10 @@ interface TrackState {
 ```
 - In memory: dense typed arrays. On disk: sparse, only hits as `[step, state, note]`.
 - v1 files (16-step loops) still load: the loop is tiled across the whole song.
-- **A library of projects in the browser**, with no file dialogs needed. The header shows the open project's name; click it (or ⌘O) for **PROJECTS**: every song, newest first, each with its tempo, length, last edit and a tiny overview of where the notes are (tracks × bars). Click a row to open it. In the row: rename (edit the name in place), **COPY** (to the clipboard), **FILE** (download `<name>.json`), **DUP**, **DEL** (with UNDO). At the top: **NEW** (an empty draft), **PASTE** / ⌘V (import copied text), **IMPORT FILE**, **EXPORT ALL** (one `dubbox-library-<date>.json` with every project, which IMPORT/PASTE read back). **NEW makes a draft** (autosaved like any project, marked "draft" in the list). Leaving a draft that has notes asks **Keep this draft?**: a name field, KEEP (Enter), DISCARD, CANCEL (Esc, stays). Renaming a draft keeps it, and kept projects never ask. Leaving an empty project (no notes) deletes it silently, and on start any empty ones left over go. So quick experiments don't pile up, and nothing is lost without a choice.
+- **A library of projects in the browser**, with no file dialogs needed. The header shows the open project's name; click it (or ⌘O) for **PROJECTS**: every song, newest first, each with its tempo, length, last edit and a tiny overview of where the notes are (tracks × bars). Click a row to open it. In the row: rename (edit the name in place), **COPY** (to the clipboard), **FILE** (download `<name>.json`), **DUP**, **DEL** (with UNDO). At the top: **NEW** (an empty draft), **PASTE** / ⌘V (import copied text), **IMPORT FILE**, **EXPORT ALL** (one `gridbox-library-<date>.json` with every project, which IMPORT/PASTE read back). **NEW makes a draft** (autosaved like any project, marked "draft" in the list). Leaving a draft that has notes asks **Keep this draft?**: a name field, KEEP (Enter), DISCARD, CANCEL (Esc, stays). Renaming a draft keeps it, and kept projects never ask. Leaving an empty project (no notes) deletes it silently, and on start any empty ones left over go. So quick experiments don't pile up, and nothing is lost without a choice.
 - **Autosave** into the open project, debounced 500 ms and written at once when the page hides. On start the last open project opens. Switching projects stops playback and clears undo, the selection and the loop; the clipboard carries over.
 - **Storage is behind one interface** (`store.ts`: list / read / write / rename / remove). The browser backend is IndexedDB, with metadata and song text in separate stores so the list doesn't load every song, and it asks for persistent storage. A desktop build would swap in a folder of `.json` files. A stored project is the same JSON text a FILE export holds (export adds `name`), so moving between backends is copying text.
-- **Migration:** on first run with an empty library, the old single autosave (`localStorage['dubbox.project']`) becomes "My song", and the old text is kept under `dubbox.project.backup`.
+- **Migration:** on first run with an empty library, the old single autosave (`localStorage['gridbox.project']`) becomes "My song", and the old text is kept under `gridbox.project.backup`.
 
 ### Messages
 Defined in `src/engine/bridge.ts`. Param values are **normalized 0..1**. The worklet imports `params.ts` and maps them itself.
@@ -311,7 +311,7 @@ worklet → main:
 
 ## 8. Recording
 
-- **REC** button: records the master output in realtime while you perform. The worklet streams chunks, and on stop it encodes a **24-bit WAV** or a **320 kbps MP3** (the WAV/MP3 toggle next to REC, remembered in localStorage; LAME via `@breezystack/lamejs`) and downloads it (`dubbox-<date>.wav` / `.mp3`). MP3 needs a 32/44.1/48 kHz context, otherwise it falls back to WAV.
+- **REC** button: records the master output in realtime while you perform. The worklet streams chunks, and on stop it encodes a **24-bit WAV** or a **320 kbps MP3** (the WAV/MP3 toggle next to REC, remembered in localStorage; LAME via `@breezystack/lamejs`) and downloads it (`gridbox-<date>.wav` / `.mp3`). MP3 needs a 32/44.1/48 kHz context, otherwise it falls back to WAV.
 - **VIDEO** (third REC format): REC asks the browser to share a screen/tab (Chrome offers the current tab first; pick it), then records that picture with the engine's own audio taken straight from the graph (a `MediaStreamAudioDestinationNode`, so it's clean, no mic) via `MediaRecorder`: MP4 (H.264 + AAC) where the browser can encode it, otherwise WebM; 60 fps, 8 Mbit/s video, 256 kbit/s audio. Stops with REC or the browser's own "Stop sharing". The format can't change mid-recording. Code: `video.ts`.
 - **EXPORT** button: renders the whole song **offline**, without playing it and faster than realtime. A Web Worker runs the same engine code (`worklet.ts`, with the AudioWorklet globals shimmed, `offline/shim.ts`) at 48 kHz from bar 1 to one bar past the last note. It then stops the clock, so held and tied notes release, and keeps rendering until the delay and reverb tails fall below −60 dB for a second (at most 20 s). The file is MP3 when the REC format is MP3, otherwise WAV. Mute/solo apply as in playback, and loops and throws are ignored. The button shows progress, then ENCODING. Code: `offline/worker.ts`.
 - No offline render. The performance *is* the arrangement.
@@ -322,7 +322,7 @@ worklet → main:
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│ DUBBOX  ▶ PLAY ● REC FOLLOW   Tempo Swing Root Vol                song name  │
+│ GRIDBOX ▶ PLAY ● REC FOLLOW   Tempo Swing Root Vol                song name  │
 ├───────────────────────────────────────────────────────────────────────────────┤
 │               │ 1               2               3        ◄ ruler  │           │
 │ KICK  [M][S]  │ ■ □ □ □ ■ □ □ □ ■ □ □ □ ■ □ □ □ ■ □ □ □ ■ □ □ ...│ 
@@ -345,7 +345,7 @@ worklet → main:
 - Knob visual: arc = base, dot = live value (shows throws).
 - Colors: near-black background, off-white text, one accent color (amber) for active/playhead, red only for REC.
 
-Keyboard: `Space` play · `1–6` mute · `Shift+1–6` solo · `Q W E R T Y` hold = dub throw · `F` follow.
+Keyboard: `Space` play · `1–6` mute · `Shift+1–6` solo · `Q W E R T Y` hold = delay throw · `F` follow.
 
 ---
 
@@ -365,7 +365,7 @@ Candidates for v2, only if missing after real use: MIDI clock out/in, zoom, drif
 
 ## 12. Acceptance checklist
 
-- [ ] `npm run dev` → page loads → empty project → enter a few steps → Play → sounds like dub techno.
+- [ ] `npm run dev` → page loads → empty project → enter a few steps → Play → sounds right.
 - [ ] No clicks/zipper noise when turning any knob.
 - [ ] Delay Fbk at max blooms and saturates, never blows up. Changing Time smears pitch.
 - [ ] Holding Q–T throws a track into the delay.

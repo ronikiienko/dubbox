@@ -477,4 +477,4 @@ function safety(x: number): number {
   return Math.sign(x) * (0.9 + 0.1 * Math.tanh((a - 0.9) / 0.1));
 }
 
-registerProcessor('dubbox', Engine);
+registerProcessor('gridbox', Engine);

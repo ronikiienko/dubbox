@@ -9,11 +9,11 @@ const FORMATS: RecFormat[] = ['wav', 'mp3', 'video'];
 const MP3_RATES = [32000, 44100, 48000]; // what LAME takes as-is; anything else falls back to WAV
 
 export class Recorder {
-  format: RecFormat = FORMATS.find((f) => f === localStorage.getItem('dubbox.recFormat')) ?? 'wav';
+  format: RecFormat = FORMATS.find((f) => f === localStorage.getItem('gridbox.recFormat')) ?? 'wav';
 
   setFormat(f: RecFormat) {
     this.format = f;
-    localStorage.setItem('dubbox.recFormat', f);
+    localStorage.setItem('gridbox.recFormat', f);
   }
 
   private l: Float32Array[] = [];
@@ -81,8 +81,8 @@ export function mp3(l: Float32Array[], r: Float32Array[], sampleRate: number): U
   return out;
 }
 
-/** Download as `<name>.<ext>`; the name defaults to dubbox-<date>. */
-export function download(data: BlobPart | BlobPart[], type: string, ext: string, name = `dubbox-${new Date().toISOString().slice(0, 16).replace(':', '')}`) {
+/** Download as `<name>.<ext>`; the name defaults to gridbox-<date>. */
+export function download(data: BlobPart | BlobPart[], type: string, ext: string, name = `gridbox-${new Date().toISOString().slice(0, 16).replace(':', '')}`) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(Array.isArray(data) ? data : [data], { type }));
   a.download = `${name}.${ext}`;

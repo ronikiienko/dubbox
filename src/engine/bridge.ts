@@ -33,7 +33,7 @@ export function startEngine(getProject: () => Project): Promise<void> {
   starting ??= (async () => {
     ctx = new AudioContext({ latencyHint: 'interactive' });
     await ctx.audioWorklet.addModule(workletUrl);
-    node = new AudioWorkletNode(ctx, 'dubbox', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+    node = new AudioWorkletNode(ctx, 'gridbox', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
     node.port.onmessage = (e: MessageEvent<FromEngine>) => listeners.forEach((l) => l(e.data));
     node.connect(ctx.destination);
     node.port.postMessage({ t: 'init', project: getProject() } satisfies ToEngine);

@@ -213,7 +213,7 @@ export function chordIntervals(scale: number, size: number, step: number, out: F
 /** One-line explanations of the per-note values, shown when a value row is expanded. */
 const DESCRIPTIONS: Record<string, string> = {
   'hat.metal': 'Noise → metal. 0 = airy hiss, top = 808 ring.',
-  'snare.snap': 'Snare → clap. 0 = round dub snare, top = clap.',
+  'snare.snap': 'Snare → clap. 0 = round snare, top = clap.',
   'kick.punch': 'Pitch drop at the hit. 0 = flat sub boom, top = hard knock.',
   'kick.click': 'Beater click on the attack. 0 = none.',
   'chord.size': 'Chord size: octave, 5th, triad, 7th, 9th. Voiced automatically.',
@@ -224,7 +224,7 @@ const DESCRIPTIONS: Record<string, string> = {
   swing: 'Delays every second 16th.',
   volume: 'Master volume.',
   'reverb.size': 'Room length.',
-  'reverb.spring': 'Reverb character: room ↔ dub spring tank (boing).',
+  'reverb.spring': 'Reverb character: room ↔ spring tank (boing).',
   'tape.age': 'Tape wear: warmth, wobble, hiss.',
   lp: 'Lowpass. Lower = darker, softer.',
   res: 'Filter resonance. Higher = ringing, squelchy.',
@@ -237,7 +237,7 @@ const DESCRIPTIONS: Record<string, string> = {
   lvl: 'Volume in dB. Middle = 0 dB, down to off, up to +12.',
   pan: 'Left ↔ right. Middle = centre.',
   dly: 'Send to this track\'s tape delay.',
-  dtime: 'Echo time, as repeats per bar (4 = once a beat; 5⅓ = the classic dub dotted eighth; 12, 6, 3 = triplets). Set on any step, held until changed: change it between notes to bend the tail, like tape.',
+  dtime: 'Echo time, as repeats per bar (4 = once a beat; 5⅓ = the classic dotted eighth; 12, 6, 3 = triplets). Set on any step, held until changed: change it between notes to bend the tail, like tape.',
   dfbk: 'How long the echoes repeat. Top = runaway. Set on any step, held until changed: swell a tail after its note.',
   dtone: 'Echo colour: each repeat darker ↔ thinner. Set on any step, held until changed: darken a tail as it fades.',
   dwob: 'Tape wobble on the echoes: 0 = clean digital, middle = warbly, top = seasick. Set on any step, held until changed.',
